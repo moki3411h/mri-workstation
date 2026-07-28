@@ -1,8 +1,11 @@
 'use client';
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useWorkstationStore } from '@/store/workstationStore';
 import { toast } from '@/lib/toast';
 import { formatTime } from '@/lib/scanEngine';
+
+const ProtocolLibrary = dynamic(() => import('@/components/protocols/ProtocolLibrary'), { ssr: false });
 
 const MOCK_PATIENTS = [{
   id: 'MR-001', name: 'ANONYMOUS', dob: '1975-03-12', sex: 'M', studies: [
@@ -98,33 +101,10 @@ export default function LeftSidebar() {
           </div>
         )}
 
-        {/* PROTOCOLS TAB */}
+        {/* PROTOCOLS TAB — Full Library */}
         {tab === 1 && (
-          <div>
-            {PROTOCOLS.filter(p => !search || p.body.toLowerCase().includes(search.toLowerCase())).map(p => (
-              <div key={p.body}>
-                <div
-                  onClick={() => setOpenBody(openBody === p.body ? null : p.body)}
-                  style={{ ...ROW, background: '#0a1220', color: '#64748b', padding: '5px 8px', cursor: 'pointer' }}
-                >
-                  <span style={{ color: '#334155', fontSize: '8px' }}>{openBody === p.body ? '▼' : '▶'}</span>
-                  <span style={{ fontSize: '9.5px', fontWeight: 600, color: '#475569' }}>{p.body}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: '8px', color: '#334155' }}>{p.seqs.length}</span>
-                </div>
-                {openBody === p.body && p.seqs.map((seq, i) => (
-                  <div
-                    key={i}
-                    onClick={() => toast(`Protocol: ${seq}`)}
-                    style={ROW}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#0d1a2d'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                  >
-                    <span style={{ color: '#22d3ee', fontSize: '8px' }}>▸</span>
-                    <span style={{ fontSize: '9px' }}>{seq}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
+          <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+            <ProtocolLibrary />
           </div>
         )}
 
