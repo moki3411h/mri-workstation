@@ -154,6 +154,10 @@ interface WorkstationStore {
   toggleLearning:   () => void;
   toggleAI:         () => void;
   toggleImageImport:() => void;
+  reorderSeq:       (fromId: number, toId: number) => void;
+  deleteSeq:        (id: number) => void;
+  duplicateSeq:     (id: number) => void;
+  moveSeq:          (id: number, dir: 'up' | 'down') => void;
   resetViewport: (plane: Plane) => void;
   resetAll:      () => void;
 }
@@ -335,6 +339,44 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   toggleLearning:   () => set(s => ({ showLearning:    !s.showLearning })),
   toggleAI:         () => set(s => ({ showAI:           !s.showAI })),
   toggleImageImport:() => set(s => ({ showImageImport: !s.showImageImport })),
+
+  reorderSeq: (fromId, toId) => set(s => {
+    const seqs = [...s.sequences];
+    const fromIdx = seqs.findIndex(s => s.id === fromId);
+    const toIdx   = seqs.findIndex(s => s.id === toId);
+    if (fromIdx < 0 || toIdx < 0) return {};
+    const [item] = seqs.splice(fromIdx, 1);
+    seqs.splice(toIdx, 0, item!);
+    return { sequences: seqs };
+  }),
+
+  deleteSeq: (id) => set(s => ({
+    sequences: s.sequences.filter(seq => seq.id !== id),
+    selectedSeqId: s.selectedSeqId === id
+      ? (s.sequences.find(seq => seq.id !== id)?.id ?? s.selectedSeqId)
+      : s.selectedSeqId,
+  })),
+
+  duplicateSeq: (id) => set(s => {
+    const idx = s.sequences.findIndex(seq => seq.id === id);
+    if (idx < 0) return {};
+    const orig = s.sequences[idx]!;
+    const newId = Math.max(...s.sequences.map(seq => seq.id)) + 1;
+    const copy = { ...orig, id: newId, name: `${orig.name} (copy)`, status: 'pending' as const };
+    const seqs = [...s.sequences];
+    seqs.splice(idx + 1, 0, copy);
+    return { sequences: seqs };
+  }),
+
+  moveSeq: (id, dir) => set(s => {
+    const seqs = [...s.sequences];
+    const idx = seqs.findIndex(seq => seq.id === id);
+    if (idx < 0) return {};
+    const newIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= seqs.length) return {};
+    [seqs[idx], seqs[newIdx]] = [seqs[newIdx]!, seqs[idx]!];
+    return { sequences: seqs };
+  }),
 
   resetViewport: (plane) => {
     set(s => ({

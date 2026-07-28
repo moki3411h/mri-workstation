@@ -3,11 +3,11 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useWorkstationStore, type Plane } from '@/store/workstationStore';
 
-const MRIViewport  = dynamic(() => import('./MRIViewport'),  { ssr: false });
-const ThreeDViewer = dynamic(() => import('./ThreeDViewer'), { ssr: false });
+const MRIViewport   = dynamic(() => import('./MRIViewport'),   { ssr: false });
+const ThreeDViewer  = dynamic(() => import('./ThreeDViewer'),  { ssr: false });
+const ViewerToolbar = dynamic(() => import('./ViewerToolbar'), { ssr: false });
 
 const PLANES: Plane[] = ['coronal', 'sagittal', 'axial'];
-const PLANE_COLORS: Record<Plane, string> = { coronal:'#ffe040', sagittal:'#60d0ff', axial:'#60ffa0' };
 
 export default function ViewportGrid() {
   const { activeVP, setActiveVP } = useWorkstationStore();
@@ -24,7 +24,7 @@ export default function ViewportGrid() {
         onDoubleClick={() => setMaximized(isMax ? null : plane)}
         style={{
           position: 'relative',
-          width: maximized ? '100%' : '50%',
+          width:  maximized ? '100%' : '50%',
           height: maximized ? '100%' : '50%',
           border: `1px solid ${isActive ? 'rgba(34,211,238,0.5)' : '#1e293b'}`,
           boxSizing: 'border-box',
@@ -35,11 +35,10 @@ export default function ViewportGrid() {
         }}
       >
         {children}
-        {/* Maximize hint */}
         {isMax && (
           <button
             onClick={e => { e.stopPropagation(); setMaximized(null); }}
-            title="Restore"
+            title="Restore (double-click)"
             style={{
               position:'absolute', top:'5px', right:'5px', zIndex:30,
               background:'rgba(0,0,0,0.7)', border:'1px solid #263040',
@@ -54,27 +53,27 @@ export default function ViewportGrid() {
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      flexWrap: 'wrap',
-      width: '100%',
-      height: '100%',
-      background: '#04060a',
-    }}>
-      {maximized === null ? (
-        <>
-          <VPWrapper plane="coronal">   <MRIViewport plane="coronal" /> </VPWrapper>
-          <VPWrapper plane="sagittal">  <MRIViewport plane="sagittal" /> </VPWrapper>
-          <VPWrapper plane="axial">     <MRIViewport plane="axial" /> </VPWrapper>
-          <VPWrapper plane="threed">    <ThreeDViewer /> </VPWrapper>
-        </>
-      ) : (
-        <VPWrapper plane={maximized}>
-          {maximized === 'threed'
-            ? <ThreeDViewer />
-            : <MRIViewport plane={maximized as Plane} />}
-        </VPWrapper>
-      )}
+    <div style={{ display:'flex', flexDirection:'column', width:'100%', height:'100%', background:'#04060a' }}>
+      {/* ── Viewer Toolbar ─────────────────────────────────────────────── */}
+      <ViewerToolbar />
+
+      {/* ── 2×2 Viewport Grid ──────────────────────────────────────────── */}
+      <div style={{ flex:1, display:'flex', flexWrap:'wrap', overflow:'hidden' }}>
+        {maximized === null ? (
+          <>
+            <VPWrapper plane="coronal">   <MRIViewport plane="coronal" />  </VPWrapper>
+            <VPWrapper plane="sagittal">  <MRIViewport plane="sagittal" /> </VPWrapper>
+            <VPWrapper plane="axial">     <MRIViewport plane="axial" />    </VPWrapper>
+            <VPWrapper plane="threed">    <ThreeDViewer />                  </VPWrapper>
+          </>
+        ) : (
+          <VPWrapper plane={maximized}>
+            {maximized === 'threed'
+              ? <ThreeDViewer />
+              : <MRIViewport plane={maximized as Plane} />}
+          </VPWrapper>
+        )}
+      </div>
     </div>
   );
 }
