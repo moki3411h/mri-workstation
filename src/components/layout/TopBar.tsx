@@ -7,8 +7,8 @@ import { toast } from '@/lib/toast';
 export default function TopBar() {
   const {
     scan, patient, sequences, selectedSeqId,
-    toggleHelp, togglePatient, togglePhysics, toggleLearning, toggleAI,
-    stopScan, setImage, statusMsg,
+    toggleHelp, togglePatient, togglePhysics, toggleLearning, toggleAI, toggleImageImport,
+    stopScan, statusMsg,
   } = useWorkstationStore();
 
   const [time, setTime] = useState('');
@@ -26,13 +26,14 @@ export default function TopBar() {
 
   const menuItems = [
     { label: 'Patient',      action: togglePatient },
-    { label: 'Applications', action: () => toast('Applications menu') },
+    { label: 'Applications', action: () => toast('Applications') },
     { label: 'Protocols',    action: () => toast('Protocol library') },
-    { label: 'Transfer',     action: () => toast('Transfer menu') },
-    { label: 'Images',       action: () => toast('Image browser') },
-    { label: 'Planning',     action: () => toast('Planning tools') },
+    { label: 'Transfer',     action: () => toast('Transfer') },
+    { label: 'Images',       action: toggleImageImport },
+    { label: 'Physics',      action: togglePhysics },
     { label: '3D',           action: () => toast('3D viewer') },
-    { label: 'Evaluation',   action: () => toast('Evaluation') },
+    { label: 'Learning',     action: toggleLearning },
+    { label: 'AI Assist',    action: toggleAI },
     { label: 'Help',         action: toggleHelp },
   ];
 
@@ -42,7 +43,7 @@ export default function TopBar() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const url = ev.target?.result as string;
-      setImage('axial', url);
+      useWorkstationStore.getState().setImage('axial', url);
       toast(`Loaded: ${file.name}`, 'success');
     };
     reader.readAsDataURL(file);

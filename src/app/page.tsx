@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useEffect } from 'react';
 import { useWorkstationStore } from '@/store/workstationStore';
 import StatusBar from '@/components/layout/StatusBar';
+import { preloadDefaultImages } from '@/lib/imageLoader';
 
 // Dynamic imports to avoid SSR issues with Canvas/Three.js
 const TopBar        = dynamic(() => import('@/components/layout/TopBar'),        { ssr: false });
@@ -17,9 +18,51 @@ const PatientModal  = dynamic(() => import('@/components/patient/PatientModal'),
 const PhysicsPanel  = dynamic(() => import('@/components/simulation/PhysicsPanel'),{ ssr: false });
 const LearningPanel = dynamic(() => import('@/components/learning/LearningPanel'),{ ssr: false });
 const AIAssistant   = dynamic(() => import('@/components/ai/AIAssistant'),       { ssr: false });
+const ImageImport   = dynamic(() => import('@/components/viewer/ImageImport'),   { ssr: false });
 
 export default function WorkstationPage() {
-  const { leftCollapsed, rightCollapsed, showHelp, showPatient, showPhysics, showLearning, showAI } = useWorkstationStore();
+  const {
+    leftCollapsed, rightCollapsed,
+    showHelp, showPatient, showPhysics, showLearning, showAI,
+    setImage, setStatusMsg, setSlice, showImageImport,
+  } = useWorkstationStore();
+
+  // ── Auto-load real MRI images on first render ──────────────────────────────
+  useEffect(() => {
+    preloadDefaultImages().then(images => {
+      let loaded = 0;
+      if (images.axial)    { setImage('axial',    images.axial);    loaded++; }
+      if (images.coronal)  { setImage('coronal',  images.coronal);  loaded++; }
+      if (images.sagittal) { setImage('sagittal', images.sagittal); loaded++; }
+
+      // Set realistic slice positions for loaded images
+      setSlice('axial',    15);
+      setSlice('coronal',  12);
+      setSlice('sagittal', 11);
+
+      if (loaded > 0) {
+        setStatusMsg(`${loaded} MRI images loaded — system ready`);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Global keyboard shortcuts ──────────────────────────────────────────────
+  useEffect(() => {
+    const { togglePatient, togglePhysics, toggleLearning, toggleAI, toggleHelp } = useWorkstationStore.getState();
+
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (['INPUT','SELECT','TEXTAREA'].includes(tag)) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); togglePatient(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); document.getElementById('global-file-input')?.click(); }
+      if (e.key === 'h' || e.key === 'H') toggleHelp();
+      if (e.key === 'p' || e.key === 'P') togglePhysics();
+      if (e.key === 'l' || e.key === 'L') toggleLearning();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <div id="workstation" style={{
@@ -81,11 +124,35 @@ export default function WorkstationPage() {
       </div>
 
       {/* Modals and panels */}
-      {showHelp    && <HelpModal />}
-      {showPatient && <PatientModal />}
-      {showPhysics && <PhysicsPanel />}
-      {showLearning&& <LearningPanel />}
-      {showAI      && <AIAssistant />}
+      {showHelp     && <HelpModal />}
+      {showPatient  && <PatientModal />}
+      {showPhysics  && <PhysicsPanel />}
+      {showLearning && <LearningPanel />}
+      {showAI       && <AIAssistant />}
+      {showImageImport && <ImageImport />}
+
+      {/* Hidden global file input for Ctrl+O */}
+      <input
+        id="global-file-input"
+        type="file"
+        accept=".jpg,.jpeg,.png,.bmp,.tif,.tiff,.webp"
+        multiple
+        style={{ display: 'none' }}
+        onChange={e => {
+          const files = Array.from(e.target.files ?? []);
+          const { setImage, setStatusMsg } = useWorkstationStore.getState();
+          const planes: ('axial' | 'coronal' | 'sagittal')[] = ['axial', 'coronal', 'sagittal'];
+          files.slice(0, 3).forEach((file, i) => {
+            const reader = new FileReader();
+            reader.onload = ev => {
+              setImage(planes[i]!, ev.target?.result as string);
+              setStatusMsg(`Loaded: ${file.name}`);
+            };
+            reader.readAsDataURL(file);
+          });
+          e.target.value = '';
+        }}
+      />
     </div>
   );
 }

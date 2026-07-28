@@ -115,12 +115,13 @@ interface WorkstationStore {
   // UI state
   viewMode:      ViewMode;
   activeTool:    ActiveTool;
-  showHelp:      boolean;
-  showPatient:   boolean;
-  showPhysics:   boolean;
-  showLearning:  boolean;
-  showAI:        boolean;
-  statusMsg:     string;
+  showHelp:        boolean;
+  showPatient:     boolean;
+  showPhysics:     boolean;
+  showLearning:    boolean;
+  showAI:          boolean;
+  showImageImport: boolean;
+  statusMsg:       string;
   leftCollapsed: boolean;
   rightCollapsed:boolean;
 
@@ -150,8 +151,9 @@ interface WorkstationStore {
   toggleHelp:    () => void;
   togglePatient: () => void;
   togglePhysics: () => void;
-  toggleLearning:() => void;
-  toggleAI:      () => void;
+  toggleLearning:   () => void;
+  toggleAI:         () => void;
+  toggleImageImport:() => void;
   resetViewport: (plane: Plane) => void;
   resetAll:      () => void;
 }
@@ -213,12 +215,13 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
 
   viewMode:      'normal',
   activeTool:    'crosshair',
-  showHelp:      true,  // show on first load
-  showPatient:   false,
-  showPhysics:   false,
-  showLearning:  false,
-  showAI:        false,
-  statusMsg:     'System Ready — Select a sequence to begin',
+  showHelp:        false,
+  showPatient:     false,
+  showPhysics:     false,
+  showLearning:    false,
+  showAI:          false,
+  showImageImport: false,
+  statusMsg:     'System Ready — Sequence selected: t2_tse_cor',
   leftCollapsed: false,
   rightCollapsed:false,
 
@@ -329,8 +332,9 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   toggleHelp:    ()          => set(s => ({ showHelp:    !s.showHelp })),
   togglePatient: ()          => set(s => ({ showPatient: !s.showPatient })),
   togglePhysics: ()          => set(s => ({ showPhysics: !s.showPhysics })),
-  toggleLearning:()          => set(s => ({ showLearning:!s.showLearning })),
-  toggleAI:      ()          => set(s => ({ showAI:      !s.showAI })),
+  toggleLearning:   () => set(s => ({ showLearning:    !s.showLearning })),
+  toggleAI:         () => set(s => ({ showAI:           !s.showAI })),
+  toggleImageImport:() => set(s => ({ showImageImport: !s.showImageImport })),
 
   resetViewport: (plane) => {
     set(s => ({
