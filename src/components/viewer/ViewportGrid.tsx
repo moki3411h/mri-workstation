@@ -12,18 +12,18 @@ export default function ViewportGrid() {
   const { activeVP, setActiveVP } = useWorkstationStore();
   const [maximized, setMaximized] = useState<Plane | 'blank' | null>(null);
 
-  const VPWrapper = ({ plane, children }: { plane: Plane | 'blank'; children: React.ReactNode }) => {
-    const isActive = plane !== 'blank' ? activeVP === plane : false;
+  const VPWrapper = ({ plane, isFullWidth, children }: { plane: Plane; isFullWidth?: boolean; children: React.ReactNode }) => {
+    const isActive = activeVP === plane;
     const isMax = maximized === plane;
     if (maximized !== null && !isMax) return null;
 
     return (
       <div
-        onClick={() => { if (plane !== 'blank') setActiveVP(plane as Plane); }}
+        onClick={() => setActiveVP(plane)}
         onDoubleClick={() => setMaximized(isMax ? null : plane)}
         style={{
           position: 'relative',
-          width:  maximized ? '100%' : '50%',
+          width:  maximized ? '100%' : (isFullWidth ? '100%' : '50%'),
           height: maximized ? '100%' : '50%',
           border: `1px solid ${isActive ? 'rgba(34,211,238,0.5)' : '#1e293b'}`,
           boxSizing: 'border-box',
@@ -62,18 +62,11 @@ export default function ViewportGrid() {
           <>
             <VPWrapper plane="coronal">   <MRIViewport plane="coronal" />  </VPWrapper>
             <VPWrapper plane="sagittal">  <MRIViewport plane="sagittal" /> </VPWrapper>
-            <VPWrapper plane="axial">     <MRIViewport plane="axial" />    </VPWrapper>
-            <VPWrapper plane="blank">
-              <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', color:'#334155', fontSize:'12px'}}>
-                Empty Viewport
-              </div>
-            </VPWrapper>
+            <VPWrapper plane="axial" isFullWidth> <MRIViewport plane="axial" />    </VPWrapper>
           </>
         ) : (
-          <VPWrapper plane={maximized}>
-            {maximized === 'blank'
-              ? <div style={{width:'100%', height:'100%', background:'#04060a'}}/>
-              : <MRIViewport plane={maximized as Plane} />}
+          <VPWrapper plane={maximized as Plane}>
+            <MRIViewport plane={maximized as Plane} />
           </VPWrapper>
         )}
       </div>
