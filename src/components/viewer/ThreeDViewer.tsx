@@ -49,22 +49,18 @@ export default function ThreeDViewer() {
     const headTexture = textureLoader.load('/3d_head.png');
     headTexture.colorSpace = THREE.SRGBColorSpace; // For proper colors in modern Three.js
 
-    // Head sphere mapping
-    const brainGeo = new THREE.SphereGeometry(0.85, 64, 48);
-    // Rotate the geometry so the texture maps correctly (facing forward)
-    brainGeo.rotateY(-Math.PI / 2);
+    // Replace the ball with a 2D Sagittal Plane showing the anatomical head
+    const brainGeo = new THREE.PlaneGeometry(1.9, 1.9);
+    // Rotate to align with the Sagittal axis (facing sideways)
+    brainGeo.rotateY(Math.PI / 2);
     
-    const brainMat = new THREE.MeshStandardMaterial({
-      map: headTexture, roughness: 0.7, metalness: 0.1,
-      transparent: false,
+    const brainMat = new THREE.MeshBasicMaterial({
+      map: headTexture,
+      transparent: true,
+      side: THREE.DoubleSide,
     });
     const brain = new THREE.Mesh(brainGeo, brainMat);
     scene.add(brain);
-
-    // Brain outline
-    const outlineMat = new THREE.MeshBasicMaterial({ color: 0x0ea5e9, transparent: true, opacity: 0.1, side: THREE.BackSide });
-    const outline = new THREE.Mesh(new THREE.SphereGeometry(0.88, 32, 32), outlineMat);
-    scene.add(outline);
 
     // MPR cutting planes
     const makePlane = (color: number, rot?: THREE.Euler) => {
