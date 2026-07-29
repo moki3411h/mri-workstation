@@ -44,33 +44,19 @@ export default function ThreeDViewer() {
     fillLight.position.set(-2, -1, -2);
     scene.add(fillLight);
 
-    // Procedural brain texture
-    const texCanvas = document.createElement('canvas');
-    texCanvas.width = texCanvas.height = 256;
-    const tctx = texCanvas.getContext('2d')!;
-    tctx.fillStyle = '#2a3848'; tctx.fillRect(0,0,256,256);
-    for (let i = 0; i < 120; i++) {
-      const x = Math.random()*256, y = Math.random()*256, r = 4 + Math.random()*20;
-      const g = tctx.createRadialGradient(x,y,0,x,y,r);
-      g.addColorStop(0, `rgba(${50+Math.random()*30},${65+Math.random()*30},${85+Math.random()*25},0.8)`);
-      g.addColorStop(1, 'transparent');
-      tctx.fillStyle = g; tctx.beginPath(); tctx.arc(x,y,r,0,Math.PI*2); tctx.fill();
-    }
-    // Add gyri-like lines
-    tctx.strokeStyle = 'rgba(100,120,150,0.3)'; tctx.lineWidth = 2;
-    for (let i = 0; i < 30; i++) {
-      tctx.beginPath();
-      tctx.moveTo(Math.random()*256, Math.random()*256);
-      tctx.bezierCurveTo(Math.random()*256,Math.random()*256,Math.random()*256,Math.random()*256,Math.random()*256,Math.random()*256);
-      tctx.stroke();
-    }
-    const brainTexture = new THREE.CanvasTexture(texCanvas);
+    // Load the real 3D head texture provided by the user
+    const textureLoader = new THREE.TextureLoader();
+    const headTexture = textureLoader.load('/3d_head.png');
+    headTexture.colorSpace = THREE.SRGBColorSpace; // For proper colors in modern Three.js
 
-    // Brain sphere
+    // Head sphere mapping
     const brainGeo = new THREE.SphereGeometry(0.85, 64, 48);
+    // Rotate the geometry so the texture maps correctly (facing forward)
+    brainGeo.rotateY(-Math.PI / 2);
+    
     const brainMat = new THREE.MeshStandardMaterial({
-      map: brainTexture, roughness: 0.85, metalness: 0.05,
-      color: new THREE.Color(0x445566), transparent: true, opacity: 0.92,
+      map: headTexture, roughness: 0.7, metalness: 0.1,
+      transparent: false,
     });
     const brain = new THREE.Mesh(brainGeo, brainMat);
     scene.add(brain);

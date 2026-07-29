@@ -124,6 +124,7 @@ export interface WorkstationStore {
   statusMsg:       string;
   leftCollapsed: boolean;
   rightCollapsed:boolean;
+  cineMode:      boolean;
 
   // Actions
   selectSeq:     (id: number) => void;
@@ -161,6 +162,7 @@ export interface WorkstationStore {
   loadExam:         (snap: import('@/lib/examPersistence').ExamSnapshot) => void;
   resetViewport: (plane: Plane) => void;
   resetAll:      () => void;
+  toggleCine:    () => void;
 }
 
 // ── Default values ─────────────────────────────────────────
@@ -229,6 +231,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   statusMsg:     'System Ready — Sequence selected: t2_tse_cor',
   leftCollapsed: false,
   rightCollapsed:false,
+  cineMode:      false,
 
   // ── Actions ──
 
@@ -301,7 +304,8 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     set({
       sequences: advancedSeqs,
       scan: { running:false, paused:false, seqId:null, progress:0, remainSec:0 },
-      statusMsg: seq ? `Completed: ${seq.name}` : 'Sequence complete',
+      statusMsg: seq ? `Completed: ${seq.name} — Auto-playing slices` : 'Sequence complete',
+      cineMode: true, // Trigger cine loop on completion
     });
   },
 
@@ -391,6 +395,8 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     statusMsg: `Exam loaded: ${snap.patient.name} — ${new Date(snap.savedAt).toLocaleString()}`,
     ...computePhysics(snap.params),
   }),
+
+  toggleCine: () => set(s => ({ cineMode: !s.cineMode, statusMsg: !s.cineMode ? 'Cine playback started' : 'Cine playback stopped' })),
 
   resetViewport: (plane) => {
     set(s => ({

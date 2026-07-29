@@ -28,23 +28,27 @@ export default function WorkstationPage() {
   } = useWorkstationStore();
 
   // ── Auto-load real MRI images on first render ──────────────────────────────
+  // Removed in Module 12: Viewports start blank until user manually imports.
+
+  // ── Cine Loop Simulation ───────────────────────────────────────────────────
   useEffect(() => {
-    preloadDefaultImages().then(images => {
-      let loaded = 0;
-      if (images.axial)    { setImage('axial',    images.axial);    loaded++; }
-      if (images.coronal)  { setImage('coronal',  images.coronal);  loaded++; }
-      if (images.sagittal) { setImage('sagittal', images.sagittal); loaded++; }
-
-      // Set realistic slice positions for loaded images
-      setSlice('axial',    15);
-      setSlice('coronal',  12);
-      setSlice('sagittal', 11);
-
-      if (loaded > 0) {
-        setStatusMsg(`${loaded} MRI images loaded — system ready`);
+    const unsub = useWorkstationStore.subscribe((state, prevState) => {
+      if (state.cineMode && !prevState.cineMode) {
+        // Start cine loop interval on the active viewport
+        const interval = setInterval(() => {
+          const s = useWorkstationStore.getState();
+          if (!s.cineMode) { clearInterval(interval); return; }
+          const plane = s.activeVP;
+          const { cur, max } = s.slice[plane];
+          let next = cur + 1;
+          if (next > max) next = 1;
+          s.setSlice(plane, next);
+        }, 100);
+        return () => clearInterval(interval);
       }
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return unsub;
+  }, []);
 
   // ── Global keyboard shortcuts ──────────────────────────────────────────────
   useEffect(() => {

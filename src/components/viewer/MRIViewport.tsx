@@ -261,16 +261,36 @@ export default function MRIViewport({ plane }: Props) {
       const MIN = 0.05;
       const nf = { ...f };
 
-      if (handle === 'move')   { nf.x=Math.max(0,Math.min(1-f.w,initFov.x+dx)); nf.y=Math.max(0,Math.min(1-f.h,initFov.y+dy)); }
-      else if (handle==='rotate') { const a0=Math.atan2(startY-(initFov.y+initFov.h/2),startX-(initFov.x+initFov.w/2)); const a1=Math.atan2(pos.y-(initFov.y+initFov.h/2),pos.x-(initFov.x+initFov.w/2)); nf.rot=initFov.rot+(a1-a0)*180/Math.PI; }
-      else if (handle==='right')  { nf.w=Math.max(MIN,initFov.w+ldx); }
-      else if (handle==='left')   { const nw=Math.max(MIN,initFov.w-ldx); nf.x=initFov.x+initFov.w-nw; nf.w=nw; }
-      else if (handle==='bottom') { nf.h=Math.max(MIN,initFov.h+ldy); }
-      else if (handle==='top')    { const nh=Math.max(MIN,initFov.h-ldy); nf.y=initFov.y+initFov.h-nh; nf.h=nh; }
-      else if (handle==='tr')     { nf.w=Math.max(MIN,initFov.w+ldx); const nh=Math.max(MIN,initFov.h-ldy); nf.y=initFov.y+initFov.h-nh; nf.h=nh; }
-      else if (handle==='tl')     { const nw=Math.max(MIN,initFov.w-ldx); nf.x=initFov.x+initFov.w-nw; nf.w=nw; const nh=Math.max(MIN,initFov.h-ldy); nf.y=initFov.y+initFov.h-nh; nf.h=nh; }
-      else if (handle==='br')     { nf.w=Math.max(MIN,initFov.w+ldx); nf.h=Math.max(MIN,initFov.h+ldy); }
-      else if (handle==='bl')     { const nw=Math.max(MIN,initFov.w-ldx); nf.x=initFov.x+initFov.w-nw; nf.w=nw; nf.h=Math.max(MIN,initFov.h+ldy); }
+      if (handle === 'move')   { 
+        nf.x=Math.max(0,Math.min(1-f.w,initFov.x+dx)); 
+        nf.y=Math.max(0,Math.min(1-f.h,initFov.y+dy)); 
+      }
+      else if (handle==='rotate') { 
+        const a0=Math.atan2(startY-(initFov.y+initFov.h/2),startX-(initFov.x+initFov.w/2)); 
+        const a1=Math.atan2(pos.y-(initFov.y+initFov.h/2),pos.x-(initFov.x+initFov.w/2)); 
+        nf.rot=initFov.rot+(a1-a0)*180/Math.PI; 
+      }
+      else if (handle) {
+        // Symmetric resize from center for MRI standard behavior
+        let dw = 0; let dh = 0;
+        if (handle.includes('right')) dw = ldx * 2;
+        if (handle.includes('left'))  dw = -ldx * 2;
+        if (handle.includes('bottom')) dh = ldy * 2;
+        if (handle.includes('top') && handle !== 'top') dh = -ldy * 2; // 'top' is matched, but 'tl'/'tr' also include 't'
+        if (handle === 'top') dh = -ldy * 2;
+
+        const nw = Math.max(MIN, initFov.w + dw);
+        const nh = Math.max(MIN, initFov.h + dh);
+        
+        // Keep center fixed
+        const cx = initFov.x + initFov.w / 2;
+        const cy = initFov.y + initFov.h / 2;
+        
+        nf.w = nw;
+        nf.h = nh;
+        nf.x = cx - nw / 2;
+        nf.y = cy - nh / 2;
+      }
 
       store.setFov(plane, nf);
       const posX=((nf.x+nf.w/2)-0.5)*300, posY=((nf.y+nf.h/2)-0.5)*300;
