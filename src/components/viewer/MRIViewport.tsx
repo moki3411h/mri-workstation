@@ -28,7 +28,7 @@ export default function MRIViewport({ plane }: Props) {
   const store    = useWorkstationStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
-  const imgRef    = useRef<HTMLImageElement | null>(null);
+  const imgRef    = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
   const rafRef    = useRef<number>(0);
   
   // Drag State
@@ -42,13 +42,26 @@ export default function MRIViewport({ plane }: Props) {
   const spacePressedRef = useRef(false);
   const zoom      = useRef(1);
 
-  // Sync image
+  // Sync image or video
   useEffect(() => {
     const url = store.images[plane];
     if (!url) { imgRef.current = null; return; }
-    const img = new Image();
-    img.onload = () => { imgRef.current = img; };
-    img.src = url;
+    
+    // Check if it's a video based on blob URL or string prefix
+    const isVideo = url.startsWith('blob:') && url.includes('video') || url.startsWith('data:video/') || url.endsWith('.mp4');
+    
+    if (isVideo) {
+      const vid = document.createElement('video');
+      vid.muted = true;
+      vid.playsInline = true;
+      vid.onloadedmetadata = () => { imgRef.current = vid; };
+      vid.src = url;
+      vid.load();
+    } else {
+      const img = new Image();
+      img.onload = () => { imgRef.current = img; };
+      img.src = url;
+    }
   }, [store.images[plane]]);
 
   // Canvas sizing
@@ -231,10 +244,18 @@ export default function MRIViewport({ plane }: Props) {
     e.preventDefault();
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
     const file = e.dataTransfer.files[0];
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = ev => { store.setImage(plane, ev.target?.result as string); toast(`Loaded in ${PLANE_LABEL[plane]}`, 'success'); };
-    reader.readAsDataURL(file);
+    if (!file) return;
+    
+    if (file.type.startsWith('video/')) {
+      // For video, use ObjectURL for performance
+      const url = URL.createObjectURL(file) + '#video';
+      store.setImage(plane, url);
+      toast(`Video loaded in ${PLANE_LABEL[plane]}`, 'success');
+    } else if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = ev => { store.setImage(plane, ev.target?.result as string); toast(`Loaded in ${PLANE_LABEL[plane]}`, 'success'); };
+      reader.readAsDataURL(file);
+    }
   }
 
   // ─── RENDERING ──────────────────────────────────────────────────────────
@@ -302,11 +323,20 @@ export default function MRIViewport({ plane }: Props) {
     const img = imgRef.current;
     if (img) {
       const t = sl.max > 1 ? (sl.cur - 1) / (sl.max - 1) : 0.5;
+      
+      let imgW = 0, imgH = 0;
+      if (img instanceof HTMLVideoElement) {
+        if (!isNaN(img.duration) && img.duration > 0) img.currentTime = t * img.duration;
+        imgW = img.videoWidth; imgH = img.videoHeight;
+      } else {
+        imgW = img.width; imgH = img.height;
+      }
+      
       const crop = (t - 0.5) * 0.15;
-      const sx = Math.max(0, crop) * img.width;
-      const sy = Math.max(0, crop) * img.height;
-      const sw = (1 - Math.abs(crop)) * img.width;
-      const sh = (1 - Math.abs(crop)) * img.height;
+      const sx = Math.max(0, crop) * imgW;
+      const sy = Math.max(0, crop) * imgH;
+      const sw = (1 - Math.abs(crop)) * imgW;
+      const sh = (1 - Math.abs(crop)) * imgH;
       const bri = (w.brightness * (0.85 + 0.3 * Math.sin(t * Math.PI))).toFixed(2);
       const con = w.contrast.toFixed(2);
       ctx.filter = `brightness(${bri}) contrast(${con})`;
@@ -314,7 +344,7 @@ export default function MRIViewport({ plane }: Props) {
       const zf = zoom.current;
       const cx = W / 2, cy = H / 2;
       ctx.translate(cx, cy); ctx.scale(zf, zf); ctx.translate(-cx, -cy);
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+      if (imgW > 0 && imgH > 0) ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
       ctx.restore();
       ctx.filter = 'none';
       // Vignette
