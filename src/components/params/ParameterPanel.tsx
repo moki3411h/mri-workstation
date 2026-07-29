@@ -116,9 +116,10 @@ const GROUP = memo(function GROUP({ title }: { title: string }) {
 
 // ─── Result strip (memoized separately) ──────────────────────────────────────
 const ResultStrip = memo(function ResultStrip() {
-  const { calcTA, calcSNR, calcContrast, calcRes } = useWorkstationStore(s => ({
-    calcTA: s.calcTA, calcSNR: s.calcSNR, calcContrast: s.calcContrast, calcRes: s.calcRes,
-  }));
+  const calcTA = useWorkstationStore(s => s.calcTA);
+  const calcSNR = useWorkstationStore(s => s.calcSNR);
+  const calcContrast = useWorkstationStore(s => s.calcContrast);
+  const calcRes = useWorkstationStore(s => s.calcRes);
   const snrColor = calcSNR >= 60 ? '#22c55e' : calcSNR >= 30 ? '#f59e0b' : '#ef4444';
   const snrLabel = calcSNR >= 60 ? 'High' : calcSNR >= 30 ? 'Med' : 'Low';
   return (
