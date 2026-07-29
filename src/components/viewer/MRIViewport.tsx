@@ -100,10 +100,15 @@ export default function MRIViewport({ plane }: Props) {
     
     store.setActiveVP(plane);
     const pos = getPos(e);
-    const f = store.fov[plane];
+    const currentState = useWorkstationStore.getState();
+    const f = currentState.fov[plane];
     const h = hitHandle(pos.x, pos.y, f);
     
-    if (h) {
+    if (h && currentState.activeTool === 'crosshair') {
+      // Allow dragging handles even if crosshair is active
+      drag.current = { handle: h, startX: pos.x, startY: pos.y, initFov: { ...f } };
+      c.style.cursor = h === 'rotate' ? 'grabbing' : (CURSOR_MAP[h] || 'default');
+    } else if (h) {
       drag.current = { handle: h, startX: pos.x, startY: pos.y, initFov: { ...f } };
       c.style.cursor = h === 'rotate' ? 'grabbing' : (CURSOR_MAP[h] || 'default');
     } else {
@@ -170,7 +175,8 @@ export default function MRIViewport({ plane }: Props) {
       updateOrthogonalViews(nf);
     } else {
       // Hover cursors
-      const h = hitHandle(pos.x, pos.y, store.fov[plane]);
+      const currentState = useWorkstationStore.getState();
+      const h = hitHandle(pos.x, pos.y, currentState.fov[plane]);
       c.style.cursor = h ? (CURSOR_MAP[h] || 'default') : 'crosshair';
     }
   };
@@ -252,7 +258,11 @@ export default function MRIViewport({ plane }: Props) {
     const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext('2d'); if (!ctx) return;
     const W = c.width, H = c.height;
-    const { fov, xhair, slice, scan, show, sequences, selectedSeqId, wl } = store;
+    
+    // Always get the latest state directly from the store to avoid stale closures in the RAF loop
+    const state = useWorkstationStore.getState();
+    const { fov, xhair, slice, scan, show, sequences, selectedSeqId, wl } = state;
+    
     const f = fov[plane];
     const sl = slice[plane];
     const w = wl[plane];
@@ -342,7 +352,7 @@ export default function MRIViewport({ plane }: Props) {
       ctx.fillRect(0,0,W,sweepY);
     }
 
-    const seq = sequences.find(s => s.id === selectedSeqId);
+    const seq = state.sequences.find(s => s.id === state.selectedSeqId);
     ctx.font = 'bold 9.5px Roboto Mono, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillStyle = PLANE_COLOR[plane];
     ctx.fillText(PLANE_LABEL[plane], 6, 5);
@@ -352,12 +362,12 @@ export default function MRIViewport({ plane }: Props) {
     }
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(100,116,139,0.55)';
-    ctx.fillText(`TR${seq?.tr??''} TE${seq?.te??''} ${store.params.thickness}mm`, W-5, 5);
+    ctx.fillText(`TR${seq?.tr??''} TE${seq?.te??''} ${state.params.thickness}mm`, W-5, 5);
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'left';
     ctx.fillText(`${sl.cur}/${sl.max}`, 6, H-5);
     ctx.textAlign = 'right';
-    ctx.fillText(store.params.position, W-5, H-5);
+    ctx.fillText(state.params.position, W-5, H-5);
   }, [plane, renderPlanningBox]);
 
   useEffect(() => {
