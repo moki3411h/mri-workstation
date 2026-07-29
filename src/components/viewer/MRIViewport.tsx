@@ -74,22 +74,38 @@ export default function MRIViewport({ plane }: Props) {
     return { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height };
   }, []);
 
-  const hitHandle = useCallback((px: number, py: number, f: FovState): string | null => {
-    const cx=f.x+f.w/2, cy=f.y+f.h/2;
-    const ang=f.rot*Math.PI/180;
-    const dx=px-cx, dy=py-cy;
-    // Local coords (unrotated)
-    const lx=dx*Math.cos(-ang)-dy*Math.sin(-ang);
-    const ly=dx*Math.sin(-ang)+dy*Math.cos(-ang);
-    const hw=f.w/2, hh=f.h/2;
-    const handles=[
+  const hitHandle = useCallback((px: number, py: number, f: FovState, W: number, H: number): string | null => {
+    const cx = (f.x + f.w/2) * W;
+    const cy = (f.y + f.h/2) * H;
+    const ang = f.rot * Math.PI / 180;
+    
+    const pxx = px * W;
+    const pyy = py * H;
+    
+    const dx = pxx - cx;
+    const dy = pyy - cy;
+    
+    // Local coords (unrotated, in pixels)
+    const lx = dx * Math.cos(-ang) - dy * Math.sin(-ang);
+    const ly = dx * Math.sin(-ang) + dy * Math.cos(-ang);
+    
+    const hw = (f.w/2) * W;
+    const hh = (f.h/2) * H;
+    
+    // Handles in pixels
+    const handles = [
       {n:'tl',lx:-hw,ly:-hh},{n:'top',lx:0,ly:-hh},{n:'tr',lx:hw,ly:-hh},
       {n:'right',lx:hw,ly:0},{n:'br',lx:hw,ly:hh},{n:'bottom',lx:0,ly:hh},
       {n:'bl',lx:-hw,ly:hh},{n:'left',lx:-hw,ly:0},
-      {n:'rotate',lx:0,ly:-hh-HANDLE_R*2.5},
+      {n:'rotate',lx:0,ly:-hh-18}, // matching render (-hh-18)
     ];
-    for (const h of handles) if (Math.hypot(lx-h.lx,ly-h.ly)<HANDLE_R*1.8) return h.n;
-    if (Math.abs(lx)<hw && Math.abs(ly)<hh) return 'move';
+    
+    const HIT_R = 12; // 12 pixels hit radius
+    for (const h of handles) {
+      if (Math.hypot(lx - h.lx, ly - h.ly) < HIT_R) return h.n;
+    }
+    
+    if (Math.abs(lx) < hw && Math.abs(ly) < hh) return 'move';
     return null;
   }, []);
 
@@ -102,7 +118,7 @@ export default function MRIViewport({ plane }: Props) {
     const pos = getPos(e);
     const currentState = useWorkstationStore.getState();
     const f = currentState.fov[plane];
-    const h = hitHandle(pos.x, pos.y, f);
+    const h = hitHandle(pos.x, pos.y, f, c.width, c.height);
     
     if (h && currentState.activeTool === 'crosshair') {
       // Allow dragging handles even if crosshair is active
@@ -120,24 +136,31 @@ export default function MRIViewport({ plane }: Props) {
     return { ...initFov, x: initFov.x + dx, y: initFov.y + dy };
   };
 
-  const handleRotate = (pos: {x:number, y:number}, startX: number, startY: number, initFov: FovState): FovState => {
-    const cx = initFov.x + initFov.w / 2;
-    const cy = initFov.y + initFov.h / 2;
-    const a0 = Math.atan2(startY - cy, startX - cx); 
-    const a1 = Math.atan2(pos.y - cy, pos.x - cx); 
+  const handleRotate = (pos: {x:number, y:number}, startX: number, startY: number, initFov: FovState, W: number, H: number): FovState => {
+    const cx = (initFov.x + initFov.w / 2) * W;
+    const cy = (initFov.y + initFov.h / 2) * H;
+    const pxx = pos.x * W; const pyy = pos.y * H;
+    const sxx = startX * W; const syy = startY * H;
+    
+    const a0 = Math.atan2(syy - cy, sxx - cx); 
+    const a1 = Math.atan2(pyy - cy, pxx - cx); 
     return { ...initFov, rot: initFov.rot + (a1 - a0) * 180 / Math.PI };
   };
 
-  const handleResize = (handle: string, ldx: number, ldy: number, initFov: FovState): FovState => {
+  const handleResize = (handle: string, ldx: number, ldy: number, initFov: FovState, W: number, H: number): FovState => {
     const nf = { ...initFov };
     let { x, y, w, h } = initFov;
     const ang = initFov.rot * Math.PI / 180;
+    
+    // ldx, ldy are in pixels. convert to normalized for w/h
+    const ndx = ldx / W;
+    const ndy = ldy / H;
 
     // Expand based on handle, adjusting local origin
-    if (handle.includes('right'))  w = Math.max(MIN_SIZE, initFov.w + ldx);
-    if (handle.includes('left')) { const nw = Math.max(MIN_SIZE, initFov.w - ldx); const dw = initFov.w - nw; x += dw * Math.cos(ang); y += dw * Math.sin(ang); w = nw; }
-    if (handle.includes('bottom')) h = Math.max(MIN_SIZE, initFov.h + ldy);
-    if (handle.includes('top'))  { const nh = Math.max(MIN_SIZE, initFov.h - ldy); const dh = initFov.h - nh; x -= dh * Math.sin(ang); y += dh * Math.cos(ang); h = nh; }
+    if (handle.includes('right'))  w = Math.max(MIN_SIZE, initFov.w + ndx);
+    if (handle.includes('left')) { const nw = Math.max(MIN_SIZE, initFov.w - ndx); const dw = initFov.w - nw; x += dw * Math.cos(ang); y += dw * Math.sin(ang * (W/H)); w = nw; }
+    if (handle.includes('bottom')) h = Math.max(MIN_SIZE, initFov.h + ndy);
+    if (handle.includes('top'))  { const nh = Math.max(MIN_SIZE, initFov.h - ndy); const dh = initFov.h - nh; x -= dh * Math.sin(ang * (H/W)); y += dh * Math.cos(ang); h = nh; }
     
     nf.x = x; nf.y = y; nf.w = w; nf.h = h;
     return nf;
@@ -164,19 +187,21 @@ export default function MRIViewport({ plane }: Props) {
       if (handle === 'move') {
         nf = handleDragMove(dx, dy, initFov);
       } else if (handle === 'rotate') {
-        nf = handleRotate(pos, startX, startY, initFov);
+        nf = handleRotate(pos, startX, startY, initFov, c.width, c.height);
       } else {
         const ang = initFov.rot * Math.PI / 180;
-        const ldx = dx * Math.cos(-ang) - dy * Math.sin(-ang);
-        const ldy = dx * Math.sin(-ang) + dy * Math.cos(-ang);
-        nf = handleResize(handle, ldx, ldy, initFov);
+        const pdx = dx * c.width;
+        const pdy = dy * c.height;
+        const ldx = pdx * Math.cos(-ang) - pdy * Math.sin(-ang);
+        const ldy = pdx * Math.sin(-ang) + pdy * Math.cos(-ang);
+        nf = handleResize(handle, ldx, ldy, initFov, c.width, c.height);
       }
       
       updateOrthogonalViews(nf);
     } else {
       // Hover cursors
       const currentState = useWorkstationStore.getState();
-      const h = hitHandle(pos.x, pos.y, currentState.fov[plane]);
+      const h = hitHandle(pos.x, pos.y, currentState.fov[plane], c.width, c.height);
       c.style.cursor = h ? (CURSOR_MAP[h] || 'default') : 'crosshair';
     }
   };

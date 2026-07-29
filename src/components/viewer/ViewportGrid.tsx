@@ -12,7 +12,7 @@ export default function ViewportGrid() {
   const { activeVP, setActiveVP } = useWorkstationStore();
   const [maximized, setMaximized] = useState<Plane | 'blank' | null>(null);
 
-  const VPWrapper = ({ plane, isFullWidth, children }: { plane: Plane; isFullWidth?: boolean; children: React.ReactNode }) => {
+  const VPWrapper = ({ plane, children }: { plane: Plane; children: React.ReactNode }) => {
     const isActive = activeVP === plane;
     const isMax = maximized === plane;
     if (maximized !== null && !isMax) return null;
@@ -23,8 +23,8 @@ export default function ViewportGrid() {
         onDoubleClick={() => setMaximized(isMax ? null : plane)}
         style={{
           position: 'relative',
-          width:  maximized ? '100%' : (isFullWidth ? '100%' : '50%'),
-          height: maximized ? '100%' : '50%',
+          flex: maximized ? '1 1 100%' : '1 1 33.333%',
+          height: '100%',
           border: `1px solid ${isActive ? 'rgba(34,211,238,0.5)' : '#1e293b'}`,
           boxSizing: 'border-box',
           overflow: 'hidden',
@@ -56,13 +56,13 @@ export default function ViewportGrid() {
       {/* ── Viewer Toolbar ─────────────────────────────────────────────── */}
       <ViewerToolbar />
 
-      {/* ── 2×2 Viewport Grid ──────────────────────────────────────────── */}
-      <div style={{ flex:1, display:'flex', flexWrap:'wrap', overflow:'hidden' }}>
+      {/* ── 3 Column Viewport Grid ──────────────────────────────────────────── */}
+      <div style={{ flex:1, display:'flex', flexDirection:'row', overflow:'hidden' }}>
         {maximized === null ? (
           <>
             <VPWrapper plane="coronal">   <MRIViewport plane="coronal" />  </VPWrapper>
             <VPWrapper plane="sagittal">  <MRIViewport plane="sagittal" /> </VPWrapper>
-            <VPWrapper plane="axial" isFullWidth> <MRIViewport plane="axial" />    </VPWrapper>
+            <VPWrapper plane="axial">     <MRIViewport plane="axial" />    </VPWrapper>
           </>
         ) : (
           <VPWrapper plane={maximized as Plane}>
