@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useCallback } from 'react';
-import { useWorkstationStore, type Plane } from '@/store/workstationStore';
+import { useWorkstationStore, type Plane, type FovState } from '@/store/workstationStore';
 import { toast } from '@/lib/toast';
 
 const ORIENT: Record<Plane, { top:string; bottom:string; left:string; right:string }> = {
@@ -11,10 +11,15 @@ const ORIENT: Record<Plane, { top:string; bottom:string; left:string; right:stri
 const PLANE_COLOR: Record<Plane, string> = { coronal:'#ffe040', sagittal:'#60d0ff', axial:'#60ffa0' };
 const PLANE_LABEL: Record<Plane, string> = { coronal:'COR', sagittal:'SAG', axial:'TRA' };
 const HANDLE_R = 0.04;
+const MIN_SIZE = 0.1;
+
 const CURSOR_MAP: Record<string, string> = {
-  move:'grab', rotate:'crosshair',
-  top:'n-resize', bottom:'s-resize', left:'w-resize', right:'e-resize',
-  tl:'nw-resize', tr:'ne-resize', bl:'sw-resize', br:'se-resize',
+  move: 'move',
+  rotate: 'grab',
+  top: 'ns-resize', bottom: 'ns-resize', 
+  left: 'ew-resize', right: 'ew-resize',
+  tl: 'nwse-resize', br: 'nwse-resize', 
+  tr: 'nesw-resize', bl: 'nesw-resize',
 };
 
 interface Props { plane: Plane; }
@@ -25,8 +30,15 @@ export default function MRIViewport({ plane }: Props) {
   const wrapRef   = useRef<HTMLDivElement>(null);
   const imgRef    = useRef<HTMLImageElement | null>(null);
   const rafRef    = useRef<number>(0);
-  const drag      = useRef<{ handle: string | null; startX: number; startY: number; initFov: typeof store.fov.axial } | null>(null);
-  const panning   = useRef(false);
+  
+  // Drag State
+  const drag = useRef<{ 
+    handle: string; 
+    startX: number; 
+    startY: number; 
+    initFov: FovState;
+  } | null>(null);
+  
   const spacePressedRef = useRef(false);
   const zoom      = useRef(1);
 
@@ -55,8 +67,188 @@ export default function MRIViewport({ plane }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Render loop
-  const render = useCallback(() => {
+  // ─── INTERACTION LOGIC ──────────────────────────────────────────────────
+
+  const getPos = useCallback((e: React.PointerEvent): { x: number; y: number } => {
+    const c = canvasRef.current!; const r = c.getBoundingClientRect();
+    return { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height };
+  }, []);
+
+  const hitHandle = useCallback((px: number, py: number, f: FovState): string | null => {
+    const cx=f.x+f.w/2, cy=f.y+f.h/2;
+    const ang=f.rot*Math.PI/180;
+    const dx=px-cx, dy=py-cy;
+    // Local coords (unrotated)
+    const lx=dx*Math.cos(-ang)-dy*Math.sin(-ang);
+    const ly=dx*Math.sin(-ang)+dy*Math.cos(-ang);
+    const hw=f.w/2, hh=f.h/2;
+    const handles=[
+      {n:'tl',lx:-hw,ly:-hh},{n:'top',lx:0,ly:-hh},{n:'tr',lx:hw,ly:-hh},
+      {n:'right',lx:hw,ly:0},{n:'br',lx:hw,ly:hh},{n:'bottom',lx:0,ly:hh},
+      {n:'bl',lx:-hw,ly:hh},{n:'left',lx:-hw,ly:0},
+      {n:'rotate',lx:0,ly:-hh-HANDLE_R*2.5},
+    ];
+    for (const h of handles) if (Math.hypot(lx-h.lx,ly-h.ly)<HANDLE_R*1.8) return h.n;
+    if (Math.abs(lx)<hw && Math.abs(ly)<hh) return 'move';
+    return null;
+  }, []);
+
+  const startDrag = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const c = canvasRef.current!;
+    c.setPointerCapture(e.pointerId);
+    
+    store.setActiveVP(plane);
+    const pos = getPos(e);
+    const f = store.fov[plane];
+    const h = hitHandle(pos.x, pos.y, f);
+    
+    if (h) {
+      drag.current = { handle: h, startX: pos.x, startY: pos.y, initFov: { ...f } };
+      c.style.cursor = h === 'rotate' ? 'grabbing' : (CURSOR_MAP[h] || 'default');
+    } else {
+      store.setXhair(plane, pos);
+    }
+  };
+
+  const handleDragMove = (dx: number, dy: number, initFov: FovState): FovState => {
+    return { ...initFov, x: initFov.x + dx, y: initFov.y + dy };
+  };
+
+  const handleRotate = (pos: {x:number, y:number}, startX: number, startY: number, initFov: FovState): FovState => {
+    const cx = initFov.x + initFov.w / 2;
+    const cy = initFov.y + initFov.h / 2;
+    const a0 = Math.atan2(startY - cy, startX - cx); 
+    const a1 = Math.atan2(pos.y - cy, pos.x - cx); 
+    return { ...initFov, rot: initFov.rot + (a1 - a0) * 180 / Math.PI };
+  };
+
+  const handleResize = (handle: string, ldx: number, ldy: number, initFov: FovState): FovState => {
+    const nf = { ...initFov };
+    let { x, y, w, h } = initFov;
+    const ang = initFov.rot * Math.PI / 180;
+
+    // Expand based on handle, adjusting local origin
+    if (handle.includes('right'))  w = Math.max(MIN_SIZE, initFov.w + ldx);
+    if (handle.includes('left')) { const nw = Math.max(MIN_SIZE, initFov.w - ldx); const dw = initFov.w - nw; x += dw * Math.cos(ang); y += dw * Math.sin(ang); w = nw; }
+    if (handle.includes('bottom')) h = Math.max(MIN_SIZE, initFov.h + ldy);
+    if (handle.includes('top'))  { const nh = Math.max(MIN_SIZE, initFov.h - ldy); const dh = initFov.h - nh; x -= dh * Math.sin(ang); y += dh * Math.cos(ang); h = nh; }
+    
+    nf.x = x; nf.y = y; nf.w = w; nf.h = h;
+    return nf;
+  };
+
+  const updateOrthogonalViews = (nf: FovState) => {
+    store.setFov(plane, nf);
+    // Real-time parameter sync
+    const posX = ((nf.x + nf.w/2) - 0.5) * 300;
+    const posY = ((nf.y + nf.h/2) - 0.5) * 300;
+    store.setParam('position', `L${Math.abs(posX).toFixed(1)} P${Math.abs(posY).toFixed(1)} F2.2`);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const c = canvasRef.current!;
+    const pos = getPos(e);
+    
+    if (drag.current) {
+      const { handle, startX, startY, initFov } = drag.current;
+      const dx = pos.x - startX;
+      const dy = pos.y - startY;
+      let nf: FovState;
+
+      if (handle === 'move') {
+        nf = handleDragMove(dx, dy, initFov);
+      } else if (handle === 'rotate') {
+        nf = handleRotate(pos, startX, startY, initFov);
+      } else {
+        const ang = initFov.rot * Math.PI / 180;
+        const ldx = dx * Math.cos(-ang) - dy * Math.sin(-ang);
+        const ldy = dx * Math.sin(-ang) + dy * Math.cos(-ang);
+        nf = handleResize(handle, ldx, ldy, initFov);
+      }
+      
+      updateOrthogonalViews(nf);
+    } else {
+      // Hover cursors
+      const h = hitHandle(pos.x, pos.y, store.fov[plane]);
+      c.style.cursor = h ? (CURSOR_MAP[h] || 'default') : 'crosshair';
+    }
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    drag.current = null;
+    canvasRef.current?.releasePointerCapture(e.pointerId);
+  };
+
+  function onWheel(e: React.WheelEvent) {
+    e.preventDefault();
+    if (e.ctrlKey) { zoom.current = Math.max(0.5, Math.min(4, zoom.current + (e.deltaY > 0 ? -0.1 : 0.1))); return; }
+    const d = e.deltaY > 0 ? 1 : -1;
+    store.setSlice(plane, store.slice[plane].cur + d);
+  }
+
+  function onDblClick() {
+    store.resetViewport(plane);
+    zoom.current = 1;
+    toast(`${PLANE_LABEL[plane]} reset`, 'success');
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = ev => { store.setImage(plane, ev.target?.result as string); toast(`Loaded in ${PLANE_LABEL[plane]}`, 'success'); };
+    reader.readAsDataURL(file);
+  }
+
+  // ─── RENDERING ──────────────────────────────────────────────────────────
+  
+  const renderPlanningBox = useCallback((ctx: CanvasRenderingContext2D, W: number, H: number, f: FovState) => {
+    const bx=f.x*W, by=f.y*H, bw=f.w*W, bh=f.h*H;
+    const cx=bx+bw/2, cy=by+bh/2;
+    const ang = f.rot * Math.PI / 180;
+    
+    ctx.save(); 
+    ctx.translate(cx, cy); 
+    ctx.rotate(ang);
+    
+    const hw=bw/2, hh=bh/2;
+    // Box
+    ctx.fillStyle='rgba(255,224,64,0.05)'; ctx.fillRect(-hw,-hh,bw,bh);
+    ctx.strokeStyle='#ffe040'; ctx.lineWidth=1.5; ctx.strokeRect(-hw,-hh,bw,bh);
+    
+    // Cross center lines
+    ctx.strokeStyle='rgba(255,224,64,0.4)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,-hh); ctx.lineTo(0,hh); ctx.moveTo(-hw,0); ctx.lineTo(hw,0); ctx.stroke();
+    
+    // Corner ticks
+    ctx.strokeStyle='#ffe040'; ctx.lineWidth=2;
+    [[-hw,-hh],[hw,-hh],[-hw,hh],[hw,hh]].forEach(([px,py])=>{
+      const sx=px<0?1:-1, sy=py<0?1:-1, t=8;
+      ctx.beginPath(); ctx.moveTo(px,py+sy*t); ctx.lineTo(px,py); ctx.lineTo(px+sx*t,py); ctx.stroke();
+    });
+    
+    // Handles
+    const handles:[number,number][]=[[-hw,-hh],[0,-hh],[hw,-hh],[hw,0],[hw,hh],[0,hh],[-hw,hh],[-hw,0]];
+    handles.forEach(([hx,hy])=>{
+      ctx.fillStyle='#ffe040'; ctx.strokeStyle='rgba(0,0,0,0.7)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.rect(hx-4,hy-4,8,8); ctx.fill(); ctx.stroke();
+    });
+    
+    // Rotation handle
+    const rhy=-hh-18;
+    ctx.strokeStyle='rgba(255,224,64,0.5)'; ctx.lineWidth=1.5; ctx.setLineDash([2,3]);
+    ctx.beginPath(); ctx.moveTo(0,-hh); ctx.lineTo(0,rhy); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#ffe040'; ctx.strokeStyle='rgba(0,0,0,0.7)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(0,rhy,4.5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    
+    ctx.restore();
+  }, []);
+
+  const renderCanvas = useCallback(() => {
     const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext('2d'); if (!ctx) return;
     const W = c.width, H = c.height;
@@ -66,8 +258,7 @@ export default function MRIViewport({ plane }: Props) {
     const w = wl[plane];
 
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
 
     // Draw image
     const img = imgRef.current;
@@ -104,7 +295,6 @@ export default function MRIViewport({ plane }: Props) {
       ctx.fillText('Drop an MRI image here', W/2, H/2 + 10);
     }
 
-    // Orientation labels
     if (show.labels) {
       const o = ORIENT[plane];
       ctx.font = 'bold 11px Roboto Mono, monospace';
@@ -118,7 +308,6 @@ export default function MRIViewport({ plane }: Props) {
       ctx.shadowBlur = 0;
     }
 
-    // Crosshair
     if (show.xhair) {
       const ch = xhair[plane];
       const cx = ch.x * W, cy = ch.y * H;
@@ -130,40 +319,10 @@ export default function MRIViewport({ plane }: Props) {
       ctx.restore();
     }
 
-    // FoV planning box
     if (show.fov) {
-      const bx=f.x*W, by=f.y*H, bw=f.w*W, bh=f.h*H;
-      const cx=bx+bw/2, cy=by+bh/2;
-      const ang = f.rot * Math.PI / 180;
-      ctx.save(); ctx.translate(cx,cy); ctx.rotate(ang);
-      const hw=bw/2, hh=bh/2;
-      ctx.fillStyle='rgba(255,224,64,0.05)'; ctx.fillRect(-hw,-hh,bw,bh);
-      ctx.strokeStyle='#ffe040'; ctx.lineWidth=1.5; ctx.strokeRect(-hw,-hh,bw,bh);
-      ctx.strokeStyle='rgba(255,224,64,0.4)'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(0,-hh); ctx.lineTo(0,hh); ctx.moveTo(-hw,0); ctx.lineTo(hw,0); ctx.stroke();
-      // Corner ticks
-      ctx.strokeStyle='#ffe040'; ctx.lineWidth=2;
-      [[-hw,-hh],[hw,-hh],[-hw,hh],[hw,hh]].forEach(([px,py])=>{
-        const sx=px<0?1:-1, sy=py<0?1:-1, t=8;
-        ctx.beginPath(); ctx.moveTo(px,py+sy*t); ctx.lineTo(px,py); ctx.lineTo(px+sx*t,py); ctx.stroke();
-      });
-      // Handles
-      const handles:[number,number][]=[[-hw,-hh],[0,-hh],[hw,-hh],[hw,0],[hw,hh],[0,hh],[-hw,hh],[-hw,0]];
-      handles.forEach(([hx,hy])=>{
-        ctx.fillStyle='#ffe040'; ctx.strokeStyle='rgba(0,0,0,0.7)'; ctx.lineWidth=1;
-        ctx.beginPath(); ctx.rect(hx-4,hy-4,8,8); ctx.fill(); ctx.stroke();
-      });
-      // Rotation handle
-      const rhy=-hh-18;
-      ctx.strokeStyle='rgba(255,224,64,0.5)'; ctx.lineWidth=1; ctx.setLineDash([2,4]);
-      ctx.beginPath(); ctx.moveTo(0,-hh); ctx.lineTo(0,rhy); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle='#ffe040'; ctx.strokeStyle='rgba(0,0,0,0.7)';
-      ctx.beginPath(); ctx.arc(0,rhy,4,0,Math.PI*2); ctx.fill(); ctx.stroke();
-      ctx.restore();
+      renderPlanningBox(ctx, W, H, f);
     }
 
-    // Slice markers
     if (show.sliceMarkers && sl.max > 1) {
       const spacing = H / sl.max;
       ctx.strokeStyle = 'rgba(0,155,222,0.15)'; ctx.lineWidth = 0.5;
@@ -174,18 +333,15 @@ export default function MRIViewport({ plane }: Props) {
       ctx.beginPath(); ctx.moveTo(0,curY); ctx.lineTo(W,curY); ctx.stroke();
     }
 
-    // Scan sweep
     if (scan.running && !scan.paused) {
       const sweepY = (scan.progress / 100) * H;
       const g = ctx.createLinearGradient(0,sweepY-8,0,sweepY+8);
       g.addColorStop(0,'transparent'); g.addColorStop(0.5,'rgba(34,197,94,0.8)'); g.addColorStop(1,'transparent');
       ctx.fillStyle = g; ctx.fillRect(0, sweepY-8, W, 16);
-      // Progress overlay
       ctx.fillStyle = 'rgba(34,197,94,0.04)';
       ctx.fillRect(0,0,W,sweepY);
     }
 
-    // Corner info labels
     const seq = sequences.find(s => s.id === selectedSeqId);
     ctx.font = 'bold 9.5px Roboto Mono, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillStyle = PLANE_COLOR[plane];
@@ -202,130 +358,14 @@ export default function MRIViewport({ plane }: Props) {
     ctx.fillText(`${sl.cur}/${sl.max}`, 6, H-5);
     ctx.textAlign = 'right';
     ctx.fillText(store.params.position, W-5, H-5);
-  }, [plane]);
+  }, [plane, renderPlanningBox]);
 
   useEffect(() => {
     let running = true;
-    const loop = () => { if (!running) return; render(); rafRef.current = requestAnimationFrame(loop); };
+    const loop = () => { if (!running) return; renderCanvas(); rafRef.current = requestAnimationFrame(loop); };
     rafRef.current = requestAnimationFrame(loop);
     return () => { running = false; cancelAnimationFrame(rafRef.current); };
-  }, [render]);
-
-  // Hit test FoV handle
-  function hitHandle(px: number, py: number, f: typeof store.fov.axial): string | null {
-    const cx=f.x+f.w/2, cy=f.y+f.h/2;
-    const ang=f.rot*Math.PI/180;
-    const dx=px-cx, dy=py-cy;
-    const lx=dx*Math.cos(-ang)-dy*Math.sin(-ang);
-    const ly=dx*Math.sin(-ang)+dy*Math.cos(-ang);
-    const hw=f.w/2, hh=f.h/2;
-    const handles=[
-      {n:'tl',lx:-hw,ly:-hh},{n:'top',lx:0,ly:-hh},{n:'tr',lx:hw,ly:-hh},
-      {n:'right',lx:hw,ly:0},{n:'br',lx:hw,ly:hh},{n:'bottom',lx:0,ly:hh},
-      {n:'bl',lx:-hw,ly:hh},{n:'left',lx:-hw,ly:0},{n:'rotate',lx:0,ly:-hh-HANDLE_R*2.5},
-    ];
-    for (const h of handles) if (Math.hypot(lx-h.lx,ly-h.ly)<HANDLE_R*1.8) return h.n;
-    if (Math.abs(lx)<hw && Math.abs(ly)<hh) return 'move';
-    return null;
-  }
-
-  function getPos(e: React.MouseEvent): { x: number; y: number } {
-    const c = canvasRef.current!; const r = c.getBoundingClientRect();
-    return { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height };
-  }
-
-  function onMouseDown(e: React.MouseEvent) {
-    if (e.button === 2) return;
-    store.setActiveVP(plane);
-    const pos = getPos(e);
-    const f = store.fov[plane];
-    const h = hitHandle(pos.x, pos.y, f);
-    if (h) {
-      drag.current = { handle: h, startX: pos.x, startY: pos.y, initFov: { ...f } };
-    } else {
-      store.setXhair(plane, pos);
-    }
-  }
-
-  function onMouseMove(e: React.MouseEvent) {
-    const c = canvasRef.current!;
-    const pos = getPos(e);
-    const f = store.fov[plane];
-
-    if (drag.current) {
-      const { handle, startX, startY, initFov } = drag.current;
-      const dx = pos.x - startX, dy = pos.y - startY;
-      const ang = initFov.rot * Math.PI / 180;
-      const ldx = dx * Math.cos(-ang) - dy * Math.sin(-ang);
-      const ldy = dx * Math.sin(-ang) + dy * Math.cos(-ang);
-      const MIN = 0.05;
-      const nf = { ...f };
-
-      if (handle === 'move')   { 
-        nf.x = initFov.x + dx; 
-        nf.y = initFov.y + dy; 
-      }
-      else if (handle==='rotate') { 
-        const a0=Math.atan2(startY-(initFov.y+initFov.h/2),startX-(initFov.x+initFov.w/2)); 
-        const a1=Math.atan2(pos.y-(initFov.y+initFov.h/2),pos.x-(initFov.x+initFov.w/2)); 
-        nf.rot=initFov.rot+(a1-a0)*180/Math.PI; 
-      }
-      else if (handle) {
-        // Symmetric resize from center for MRI standard behavior
-        let dw = 0; let dh = 0;
-        if (handle.includes('right')) dw = ldx * 2;
-        if (handle.includes('left'))  dw = -ldx * 2;
-        if (handle.includes('bottom')) dh = ldy * 2;
-        if (handle.includes('top') && handle !== 'top') dh = -ldy * 2; // 'top' is matched, but 'tl'/'tr' also include 't'
-        if (handle === 'top') dh = -ldy * 2;
-
-        const nw = Math.max(MIN, initFov.w + dw);
-        const nh = Math.max(MIN, initFov.h + dh);
-        
-        // Keep center fixed
-        const cx = initFov.x + initFov.w / 2;
-        const cy = initFov.y + initFov.h / 2;
-        
-        nf.w = nw;
-        nf.h = nh;
-        nf.x = cx - nw / 2;
-        nf.y = cy - nh / 2;
-      }
-
-      store.setFov(plane, nf);
-      const posX=((nf.x+nf.w/2)-0.5)*300, posY=((nf.y+nf.h/2)-0.5)*300;
-      store.setParam('position', `L${Math.abs(posX).toFixed(1)} P${Math.abs(posY).toFixed(1)} F2.2`);
-      c.style.cursor = handle ? (CURSOR_MAP[handle] || 'default') : 'crosshair';
-    } else {
-      const h = hitHandle(pos.x, pos.y, f);
-      c.style.cursor = h ? (CURSOR_MAP[h] || 'default') : 'crosshair';
-    }
-  }
-
-  function onMouseUp() { drag.current = null; }
-
-  function onWheel(e: React.WheelEvent) {
-    e.preventDefault();
-    if (e.ctrlKey) { zoom.current = Math.max(0.5, Math.min(4, zoom.current + (e.deltaY > 0 ? -0.1 : 0.1))); return; }
-    const d = e.deltaY > 0 ? 1 : -1;
-    store.setSlice(plane, store.slice[plane].cur + d);
-  }
-
-  function onDblClick() {
-    store.resetViewport(plane);
-    zoom.current = 1;
-    toast(`${PLANE_LABEL[plane]} reset`, 'success');
-  }
-
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = ev => { store.setImage(plane, ev.target?.result as string); toast(`Loaded in ${PLANE_LABEL[plane]}`, 'success'); };
-    reader.readAsDataURL(file);
-  }
+  }, [renderCanvas]);
 
   useEffect(() => {
     const kd = (e: KeyboardEvent) => {
@@ -351,12 +391,13 @@ export default function MRIViewport({ plane }: Props) {
       <canvas
         ref={canvasRef}
         className="vp-canvas"
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
+        onPointerDown={startDrag}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
         onWheel={onWheel}
         onDoubleClick={onDblClick}
+        style={{ width:'100%', height:'100%', display:'block', touchAction:'none' }}
       />
     </div>
   );
