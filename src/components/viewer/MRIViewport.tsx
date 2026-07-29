@@ -262,8 +262,8 @@ export default function MRIViewport({ plane }: Props) {
       const nf = { ...f };
 
       if (handle === 'move')   { 
-        nf.x=Math.max(0,Math.min(1-f.w,initFov.x+dx)); 
-        nf.y=Math.max(0,Math.min(1-f.h,initFov.y+dy)); 
+        nf.x = initFov.x + dx; 
+        nf.y = initFov.y + dy; 
       }
       else if (handle==='rotate') { 
         const a0=Math.atan2(startY-(initFov.y+initFov.h/2),startX-(initFov.x+initFov.w/2)); 
