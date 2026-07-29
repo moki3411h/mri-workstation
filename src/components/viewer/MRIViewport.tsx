@@ -110,9 +110,10 @@ export default function MRIViewport({ plane }: Props) {
   }, []);
 
   const startDrag = (e: React.PointerEvent) => {
+    e.preventDefault();
     if (e.button !== 0) return;
     const c = canvasRef.current!;
-    c.setPointerCapture(e.pointerId);
+    try { c.setPointerCapture(e.pointerId); } catch(err) {}
     
     store.setActiveVP(plane);
     const pos = getPos(e);
@@ -127,7 +128,7 @@ export default function MRIViewport({ plane }: Props) {
     } else if (h) {
       drag.current = { handle: h, startX: pos.x, startY: pos.y, initFov: { ...f } };
       c.style.cursor = h === 'rotate' ? 'grabbing' : (CURSOR_MAP[h] || 'default');
-    } else {
+    } else if (currentState.activeTool === 'crosshair') {
       store.setXhair(plane, pos);
     }
   };
@@ -175,6 +176,7 @@ export default function MRIViewport({ plane }: Props) {
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    e.preventDefault();
     const c = canvasRef.current!;
     const pos = getPos(e);
     
@@ -207,8 +209,9 @@ export default function MRIViewport({ plane }: Props) {
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
+    e.preventDefault();
     drag.current = null;
-    canvasRef.current?.releasePointerCapture(e.pointerId);
+    try { canvasRef.current?.releasePointerCapture(e.pointerId); } catch(err) {}
   };
 
   function onWheel(e: React.WheelEvent) {
