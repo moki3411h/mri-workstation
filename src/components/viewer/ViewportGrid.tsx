@@ -4,23 +4,22 @@ import dynamic from 'next/dynamic';
 import { useWorkstationStore, type Plane } from '@/store/workstationStore';
 
 const MRIViewport   = dynamic(() => import('./MRIViewport'),   { ssr: false });
-const ThreeDViewer  = dynamic(() => import('./ThreeDViewer'),  { ssr: false });
 const ViewerToolbar = dynamic(() => import('./ViewerToolbar'), { ssr: false });
 
 const PLANES: Plane[] = ['coronal', 'sagittal', 'axial'];
 
 export default function ViewportGrid() {
   const { activeVP, setActiveVP } = useWorkstationStore();
-  const [maximized, setMaximized] = useState<Plane | 'threed' | null>(null);
+  const [maximized, setMaximized] = useState<Plane | 'blank' | null>(null);
 
-  const VPWrapper = ({ plane, children }: { plane: Plane | 'threed'; children: React.ReactNode }) => {
-    const isActive = plane !== 'threed' ? activeVP === plane : false;
+  const VPWrapper = ({ plane, children }: { plane: Plane | 'blank'; children: React.ReactNode }) => {
+    const isActive = plane !== 'blank' ? activeVP === plane : false;
     const isMax = maximized === plane;
     if (maximized !== null && !isMax) return null;
 
     return (
       <div
-        onClick={() => { if (plane !== 'threed') setActiveVP(plane as Plane); }}
+        onClick={() => { if (plane !== 'blank') setActiveVP(plane as Plane); }}
         onDoubleClick={() => setMaximized(isMax ? null : plane)}
         style={{
           position: 'relative',
@@ -64,12 +63,16 @@ export default function ViewportGrid() {
             <VPWrapper plane="coronal">   <MRIViewport plane="coronal" />  </VPWrapper>
             <VPWrapper plane="sagittal">  <MRIViewport plane="sagittal" /> </VPWrapper>
             <VPWrapper plane="axial">     <MRIViewport plane="axial" />    </VPWrapper>
-            <VPWrapper plane="threed">    <ThreeDViewer />                  </VPWrapper>
+            <VPWrapper plane="blank">
+              <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', color:'#334155', fontSize:'12px'}}>
+                Empty Viewport
+              </div>
+            </VPWrapper>
           </>
         ) : (
           <VPWrapper plane={maximized}>
-            {maximized === 'threed'
-              ? <ThreeDViewer />
+            {maximized === 'blank'
+              ? <div style={{width:'100%', height:'100%', background:'#04060a'}}/>
               : <MRIViewport plane={maximized as Plane} />}
           </VPWrapper>
         )}
