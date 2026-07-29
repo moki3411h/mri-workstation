@@ -69,7 +69,7 @@ export interface SafetyState {
 export type ViewMode = 'normal' | 'linked' | 'compare';
 export type ActiveTool = 'crosshair' | 'pan' | 'zoom' | 'wl' | 'measure-dist' | 'measure-angle' | 'roi' | 'annotate';
 
-interface WorkstationStore {
+export interface WorkstationStore {
   // Sequences
   sequences:    Sequence[];
   selectedSeqId: number;
@@ -158,6 +158,7 @@ interface WorkstationStore {
   deleteSeq:        (id: number) => void;
   duplicateSeq:     (id: number) => void;
   moveSeq:          (id: number, dir: 'up' | 'down') => void;
+  loadExam:         (snap: import('@/lib/examPersistence').ExamSnapshot) => void;
   resetViewport: (plane: Plane) => void;
   resetAll:      () => void;
 }
@@ -376,6 +377,19 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     if (newIdx < 0 || newIdx >= seqs.length) return {};
     [seqs[idx], seqs[newIdx]] = [seqs[newIdx]!, seqs[idx]!];
     return { sequences: seqs };
+  }),
+
+  loadExam: (snap) => set({
+    patient:   snap.patient,
+    safety:    snap.safety,
+    sequences: snap.sequences,
+    params:    snap.params,
+    fov:       snap.fov,
+    slice:     snap.slice,
+    wl:        snap.wl,
+    show:      snap.show,
+    statusMsg: `Exam loaded: ${snap.patient.name} — ${new Date(snap.savedAt).toLocaleString()}`,
+    ...computePhysics(snap.params),
   }),
 
   resetViewport: (plane) => {

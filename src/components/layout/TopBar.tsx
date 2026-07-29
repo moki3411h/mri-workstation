@@ -1,15 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWorkstationStore } from '@/store/workstationStore';
 import { toast } from '@/lib/toast';
+import { exportExam, downloadJSON, readJSONFile, validateSnapshot } from '@/lib/examPersistence';
 
 export default function TopBar() {
   const {
     scan, patient, sequences, selectedSeqId,
     toggleHelp, togglePatient, togglePhysics, toggleLearning, toggleAI, toggleImageImport,
-    stopScan, statusMsg,
+    stopScan, statusMsg, loadExam,
+    params, fov, slice, wl, show, safety,
   } = useWorkstationStore();
+
+  const loadFileRef = useRef<HTMLInputElement>(null);
 
   const [time, setTime] = useState('');
 
@@ -26,12 +30,10 @@ export default function TopBar() {
 
   const menuItems = [
     { label: 'Patient',      action: togglePatient },
-    { label: 'Applications', action: () => toast('Applications') },
-    { label: 'Protocols',    action: () => toast('Protocol library') },
-    { label: 'Transfer',     action: () => toast('Transfer') },
     { label: 'Images',       action: toggleImageImport },
+    { label: 'Save Exam',    action: handleSaveExam },
+    { label: 'Load Exam',    action: () => loadFileRef.current?.click() },
     { label: 'Physics',      action: togglePhysics },
-    { label: '3D',           action: () => toast('3D viewer') },
     { label: 'Learning',     action: toggleLearning },
     { label: 'AI Assist',    action: toggleAI },
     { label: 'Help',         action: toggleHelp },
@@ -50,6 +52,27 @@ export default function TopBar() {
     e.target.value = '';
   }
 
+  function handleSaveExam() {
+    const snap = exportExam({ patient, safety, sequences, params, fov, slice, wl, show });
+    const name = `exam_${patient.name.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.json`;
+    downloadJSON(snap, name);
+    toast(`Exam saved: ${name}`, 'success');
+  }
+
+  async function handleLoadExam(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const data = await readJSONFile(file);
+      if (!validateSnapshot(data)) { toast('Invalid exam file format', 'error'); return; }
+      loadExam(data);
+      toast(`Exam loaded: ${data.patient.name}`, 'success');
+    } catch (err) {
+      toast('Failed to load exam file', 'error');
+    }
+    e.target.value = '';
+  }
+
   return (
     <div style={{
       display: 'flex', alignItems: 'center', height: '36px', width: '100%',
@@ -57,6 +80,8 @@ export default function TopBar() {
       borderBottom: '1px solid #1e293b', flexShrink: 0, padding: '0 6px',
       gap: '0', position: 'relative', zIndex: 50,
     }}>
+      <input type="file" ref={loadFileRef} style={{ display:'none' }} accept=".json" onChange={handleLoadExam} />
+
       {/* Logo */}
       <div style={{ display:'flex', alignItems:'baseline', gap:'2px', padding:'0 10px', flexShrink:0 }}>
         <span style={{ fontWeight:800, fontSize:'13px', letterSpacing:'2px', color:'#22d3ee', fontFamily:'Inter,sans-serif' }}>MRI</span>
