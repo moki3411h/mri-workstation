@@ -23,7 +23,11 @@ export const auth = getAuth(app);
 // Authenticate anonymously (so we can restrict Firestore rules to auth != null)
 if (typeof window !== 'undefined') {
   signInAnonymously(auth).catch(err => {
-    console.error("Anonymous auth failed:", err);
+    if (err.code === 'auth/configuration-not-found') {
+      console.warn("Firebase Auth Warning: Anonymous sign-in is not enabled in your Firebase Console. Please go to Firebase Console -> Authentication -> Sign-in method -> Enable Anonymous.");
+    } else {
+      console.error("Anonymous auth failed:", err);
+    }
   });
 }
 
