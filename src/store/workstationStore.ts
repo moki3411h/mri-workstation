@@ -326,18 +326,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
 
   setFov:    (plane, fov)    => set(s => ({ fov:   { ...s.fov,   [plane]: { ...s.fov[plane],   ...fov  } } })),
   setXhair:  (plane, pos)    => set(s => ({ xhair: { ...s.xhair, [plane]: pos } })),
-  setSlice:  (plane, cur)    => set(s => {
-    const sl = s.slice[plane];
-    const safeCur = Math.max(1, Math.min(sl.max, cur));
-    const t = sl.max > 1 ? (safeCur - 1) / (sl.max - 1) : 0.5;
-    // Dynamic FOV sizing for mockup (e.g. gets larger as slice increases)
-    const w = 0.2 + (t * 0.4);
-    const h = 0.2 + (t * 0.4);
-    return {
-      slice: { ...s.slice, [plane]: { ...sl, cur: safeCur } },
-      fov: { ...s.fov, [plane]: { ...s.fov[plane], w, h } }
-    };
-  }),
+  setSlice:  (plane, cur)    => set(s => ({ slice: { ...s.slice, [plane]: { ...s.slice[plane], cur: Math.max(1, Math.min(s.slice[plane].max, cur)) } } })),
   setWL:     (plane, wl)     => set(s => ({ wl:    { ...s.wl,    [plane]: { ...s.wl[plane],    ...wl   } } })),
   setActiveVP: (plane)       => set({ activeVP: plane }),
   setImage:  (plane, url)    => set(s => ({ images: { ...s.images, [plane]: url } })),
