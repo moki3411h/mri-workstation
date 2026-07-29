@@ -332,19 +332,14 @@ export default function MRIViewport({ plane }: Props) {
         imgW = img.width; imgH = img.height;
       }
       
-      const crop = (t - 0.5) * 0.15;
-      const sx = Math.max(0, crop) * imgW;
-      const sy = Math.max(0, crop) * imgH;
-      const sw = (1 - Math.abs(crop)) * imgW;
-      const sh = (1 - Math.abs(crop)) * imgH;
-      const bri = (w.brightness * (0.85 + 0.3 * Math.sin(t * Math.PI))).toFixed(2);
+      const bri = w.brightness.toFixed(2);
       const con = w.contrast.toFixed(2);
       ctx.filter = `brightness(${bri}) contrast(${con})`;
       ctx.save();
       const zf = zoom.current;
       const cx = W / 2, cy = H / 2;
       ctx.translate(cx, cy); ctx.scale(zf, zf); ctx.translate(-cx, -cy);
-      if (imgW > 0 && imgH > 0) ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+      if (imgW > 0 && imgH > 0) ctx.drawImage(img, 0, 0, imgW, imgH, 0, 0, W, H);
       ctx.restore();
       ctx.filter = 'none';
       // Vignette
