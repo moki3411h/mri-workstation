@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWorkstationStore } from '@/store/workstationStore';
 import { toast } from '@/lib/toast';
-import { exportExam, downloadJSON, readJSONFile, validateSnapshot } from '@/lib/examPersistence';
+import { exportExam, downloadJSON, readJSONFile, validateSnapshot, saveExamToCloud, listCloudExams, loadExamFromCloud, type CloudExamMeta } from '@/lib/examPersistence';
 
 export default function TopBar() {
   const {
@@ -14,6 +14,9 @@ export default function TopBar() {
   } = useWorkstationStore();
 
   const loadFileRef = useRef<HTMLInputElement>(null);
+  const [showCloudList, setShowCloudList] = useState(false);
+  const [cloudExams, setCloudExams] = useState<CloudExamMeta[]>([]);
+  const [loadingCloud, setLoadingCloud] = useState(false);
 
   const [time, setTime] = useState('');
 
@@ -32,7 +35,7 @@ export default function TopBar() {
     { label: 'Patient',      action: togglePatient },
     { label: 'Images',       action: toggleImageImport },
     { label: 'Save Exam',    action: handleSaveExam },
-    { label: 'Load Exam',    action: () => loadFileRef.current?.click() },
+    { label: 'Load Exam',    action: openCloudList },
     { label: 'Physics',      action: togglePhysics },
     { label: 'Learning',     action: toggleLearning },
     { label: 'AI Assist',    action: toggleAI },
@@ -52,11 +55,41 @@ export default function TopBar() {
     e.target.value = '';
   }
 
-  function handleSaveExam() {
+  async function handleSaveExam() {
     const snap = exportExam({ patient, safety, sequences, params, fov, slice, wl, show });
-    const name = `exam_${patient.name.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.json`;
-    downloadJSON(snap, name);
-    toast(`Exam saved: ${name}`, 'success');
+    try {
+      const id = await saveExamToCloud(snap);
+      toast(`Exam saved to cloud: ${id}`, 'success');
+    } catch (err: any) {
+      toast(`Failed to save to cloud: ${err.message}`, 'error');
+      // Fallback to local
+      const name = `exam_${patient.name.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.json`;
+      downloadJSON(snap, name);
+    }
+  }
+
+  async function openCloudList() {
+    setShowCloudList(true);
+    setLoadingCloud(true);
+    try {
+      const exams = await listCloudExams();
+      setCloudExams(exams);
+    } catch (err: any) {
+      toast(`Failed to load cloud exams: ${err.message}`, 'error');
+    } finally {
+      setLoadingCloud(false);
+    }
+  }
+
+  async function handleLoadCloud(id: string) {
+    try {
+      const snap = await loadExamFromCloud(id);
+      loadExam(snap);
+      toast(`Exam loaded: ${snap.patient.name}`, 'success');
+      setShowCloudList(false);
+    } catch (err: any) {
+      toast(`Failed to load exam: ${err.message}`, 'error');
+    }
   }
 
   async function handleLoadExam(e: React.ChangeEvent<HTMLInputElement>) {
@@ -222,6 +255,34 @@ export default function TopBar() {
           {time}
         </div>
       </div>
+      {/* Cloud Load Modal */}
+      {showCloudList && (
+        <div style={{ position:'fixed', inset:0, zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.7)' }}>
+          <div style={{ background:'#08101c', border:'1px solid #1e293b', borderRadius:'4px', width:'400px', padding:'16px', color:'#94a3b8' }}>
+            <h3 style={{ margin:'0 0 16px 0', color:'#22d3ee' }}>Cloud Exams</h3>
+            {loadingCloud ? <div style={{ fontSize:'12px' }}>Loading...</div> : (
+              <div style={{ maxHeight:'300px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'8px' }}>
+                {cloudExams.length === 0 && <div style={{ fontSize:'12px' }}>No exams found in cloud.</div>}
+                {cloudExams.map(ex => (
+                  <div key={ex.id} onClick={() => handleLoadCloud(ex.id)} style={{ padding:'8px', background:'#0d1626', border:'1px solid #1e293b', borderRadius:'2px', cursor:'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = '#22d3ee')} onMouseLeave={e => (e.currentTarget.style.borderColor = '#1e293b')}>
+                    <div style={{ fontSize:'12px', fontWeight:600, color:'#e2e8f0' }}>{ex.patientName}</div>
+                    <div style={{ fontSize:'10px', color:'#64748b', marginTop:'4px' }}>{ex.patientId} • {ex.study} • {new Date(ex.savedAt).toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop:'16px', display:'flex', justifyContent:'space-between' }}>
+              <button onClick={() => loadFileRef.current?.click()} style={{ padding:'4px 12px', background:'transparent', border:'1px solid #1e293b', color:'#94a3b8', cursor:'pointer', borderRadius:'2px' }}>
+                Load from Local File
+              </button>
+              <button onClick={() => setShowCloudList(false)} style={{ padding:'4px 12px', background:'#1e293b', border:'none', color:'#e2e8f0', cursor:'pointer', borderRadius:'2px' }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

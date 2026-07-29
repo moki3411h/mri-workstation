@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // We restrict all access to authenticated users (even anonymously authenticated)
+    match /exams/{examId} {
+      
+      // Allow read if the user is authenticated. 
+      // (For a production system, you might want `resource.data.userId == request.auth.uid`)
+      allow read: if request.auth != null;
+
+      // Allow write if authenticated, and validate the schema
+      allow create: if request.auth != null
+                    // Must have a valid version field
+                    && request.resource.data.version == '1.0'
+                    // Must include patient and sequences
+                    && request.resource.data.patient is map
+                    && request.resource.data.sequences is list
+                    // Must assign ownership to the creator
+                    && request.resource.data.userId == request.auth.uid
+                    // Must have a server timestamp for creation
+                    && request.resource.data.createdAt == request.time;
+                    
+      // Disallow updating existing exams to prevent tampering, 
+      // exams should be immutable once saved.
+      allow update: if false;
+      
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+  }
+}
