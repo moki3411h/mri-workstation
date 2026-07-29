@@ -131,11 +131,25 @@ export default function MRIViewport({ plane }: Props) {
     store.setActiveVP(plane);
     const pos = getPos(e);
     const currentState = useWorkstationStore.getState();
-    const f = currentState.fov[plane];
+    
+    const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
+    let targetPlane = plane;
+    if (seq) {
+      const lower = seq.name.toLowerCase();
+      if (lower.includes('axial')) targetPlane = 'axial';
+      else if (lower.includes('coronal')) targetPlane = 'coronal';
+      else if (lower.includes('sagittal')) targetPlane = 'sagittal';
+    }
+
+    if (targetPlane === plane) {
+      if (currentState.activeTool === 'crosshair') store.setXhair(plane, pos);
+      return;
+    }
+    
+    const f = currentState.fov[targetPlane];
     const h = hitHandle(pos.x, pos.y, f, c.width, c.height);
     
     if (h && currentState.activeTool === 'crosshair') {
-      // Allow dragging handles even if crosshair is active
       drag.current = { handle: h, startX: pos.x, startY: pos.y, initFov: { ...f } };
       c.style.cursor = h === 'rotate' ? 'grabbing' : (CURSOR_MAP[h] || 'default');
     } else if (h) {
@@ -180,8 +194,8 @@ export default function MRIViewport({ plane }: Props) {
     return nf;
   };
 
-  const updateOrthogonalViews = (nf: FovState) => {
-    store.setFov(plane, nf);
+  const updateOrthogonalViews = (targetP: Plane, nf: FovState) => {
+    store.setFov(targetP, nf);
     // Real-time parameter sync
     const posX = ((nf.x + nf.w/2) - 0.5) * 300;
     const posY = ((nf.y + nf.h/2) - 0.5) * 300;
@@ -194,6 +208,16 @@ export default function MRIViewport({ plane }: Props) {
     const pos = getPos(e);
     
     if (drag.current) {
+      const currentState = useWorkstationStore.getState();
+      const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
+      let targetPlane = plane;
+      if (seq) {
+        const lower = seq.name.toLowerCase();
+        if (lower.includes('axial')) targetPlane = 'axial';
+        else if (lower.includes('coronal')) targetPlane = 'coronal';
+        else if (lower.includes('sagittal')) targetPlane = 'sagittal';
+      }
+
       const { handle, startX, startY, initFov } = drag.current;
       const dx = pos.x - startX;
       const dy = pos.y - startY;
@@ -212,12 +236,24 @@ export default function MRIViewport({ plane }: Props) {
         nf = handleResize(handle, ldx, ldy, initFov, c.width, c.height);
       }
       
-      updateOrthogonalViews(nf);
+      updateOrthogonalViews(targetPlane, nf);
     } else {
       // Hover cursors
       const currentState = useWorkstationStore.getState();
-      const h = hitHandle(pos.x, pos.y, currentState.fov[plane], c.width, c.height);
-      c.style.cursor = h ? (CURSOR_MAP[h] || 'default') : 'crosshair';
+      const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
+      let targetPlane = plane;
+      if (seq) {
+        const lower = seq.name.toLowerCase();
+        if (lower.includes('axial')) targetPlane = 'axial';
+        else if (lower.includes('coronal')) targetPlane = 'coronal';
+        else if (lower.includes('sagittal')) targetPlane = 'sagittal';
+      }
+      if (targetPlane === plane) {
+        c.style.cursor = currentState.activeTool === 'pan' ? 'grab' : 'crosshair';
+      } else {
+        const h = hitHandle(pos.x, pos.y, currentState.fov[targetPlane], c.width, c.height);
+        c.style.cursor = h ? (CURSOR_MAP[h] || 'default') : 'crosshair';
+      }
     }
   };
 
@@ -270,35 +306,59 @@ export default function MRIViewport({ plane }: Props) {
     ctx.rotate(ang);
     
     const hw=bw/2, hh=bh/2;
-    // Box
-    ctx.fillStyle='rgba(255,224,64,0.05)'; ctx.fillRect(-hw,-hh,bw,bh);
-    ctx.strokeStyle='#ffe040'; ctx.lineWidth=1.5; ctx.strokeRect(-hw,-hh,bw,bh);
+    const isHoriz = bw > bh;
     
-    // Cross center lines
-    ctx.strokeStyle='rgba(255,224,64,0.4)'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(0,-hh); ctx.lineTo(0,hh); ctx.moveTo(-hw,0); ctx.lineTo(hw,0); ctx.stroke();
+    ctx.strokeStyle = '#ffe040';
+    ctx.lineWidth = 1;
     
-    // Corner ticks
-    ctx.strokeStyle='#ffe040'; ctx.lineWidth=2;
-    [[-hw,-hh],[hw,-hh],[-hw,hh],[hw,hh]].forEach(([px,py])=>{
-      const sx=px<0?1:-1, sy=py<0?1:-1, t=8;
-      ctx.beginPath(); ctx.moveTo(px,py+sy*t); ctx.lineTo(px,py); ctx.lineTo(px+sx*t,py); ctx.stroke();
-    });
+    // Draw slices (parallel lines inside)
+    ctx.beginPath();
+    const numSlices = 7;
+    if (isHoriz) {
+      const step = bh / (numSlices - 1);
+      for (let i=0; i<numSlices; i++) {
+        const y = -hh + i*step;
+        ctx.moveTo(-hw, y); ctx.lineTo(hw, y);
+      }
+    } else {
+      const step = bw / (numSlices - 1);
+      for (let i=0; i<numSlices; i++) {
+        const x = -hw + i*step;
+        ctx.moveTo(x, -hh); ctx.lineTo(x, hh);
+      }
+    }
+    ctx.stroke();
+
+    // Box outline
+    ctx.strokeRect(-hw, -hh, bw, bh);
+
+    // Center infinite line
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,224,64,0.6)';
+    ctx.lineWidth = 1;
+    if (isHoriz) {
+      ctx.moveTo(-W*2, 0); ctx.lineTo(W*2, 0);
+    } else {
+      ctx.moveTo(0, -H*2); ctx.lineTo(0, H*2);
+    }
+    ctx.stroke();
+
+    // Siemens text
+    ctx.fillStyle = '#ffe040';
+    ctx.font = '10px sans-serif';
+    ctx.fillText(`FOV ${Math.round(bw)}`, hw + 5, hh + 10);
     
-    // Handles
+    // Draw tiny handles
     const handles:[number,number][]=[[-hw,-hh],[0,-hh],[hw,-hh],[hw,0],[hw,hh],[0,hh],[-hw,hh],[-hw,0]];
+    ctx.fillStyle='#ffe040';
     handles.forEach(([hx,hy])=>{
-      ctx.fillStyle='#ffe040'; ctx.strokeStyle='rgba(0,0,0,0.7)'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.rect(hx-4,hy-4,8,8); ctx.fill(); ctx.stroke();
+      ctx.fillRect(hx-3,hy-3,6,6);
     });
     
     // Rotation handle
-    const rhy=-hh-18;
-    ctx.strokeStyle='rgba(255,224,64,0.5)'; ctx.lineWidth=1.5; ctx.setLineDash([2,3]);
+    const rhy=-hh-20;
     ctx.beginPath(); ctx.moveTo(0,-hh); ctx.lineTo(0,rhy); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle='#ffe040'; ctx.strokeStyle='rgba(0,0,0,0.7)'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.arc(0,rhy,4.5,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0,rhy,4,0,Math.PI*2); ctx.fill();
     
     ctx.restore();
   }, []);
@@ -312,7 +372,16 @@ export default function MRIViewport({ plane }: Props) {
     const state = useWorkstationStore.getState();
     const { fov, xhair, slice, scan, show, sequences, selectedSeqId, wl } = state;
     
-    const f = fov[plane];
+    const seq = sequences.find(s => s.id === selectedSeqId);
+    let targetPlane = plane;
+    if (seq) {
+      const lower = seq.name.toLowerCase();
+      if (lower.includes('axial')) targetPlane = 'axial';
+      else if (lower.includes('coronal')) targetPlane = 'coronal';
+      else if (lower.includes('sagittal')) targetPlane = 'sagittal';
+    }
+    const isTarget = targetPlane === plane;
+    
     const sl = slice[plane];
     const w = wl[plane];
 
@@ -383,7 +452,13 @@ export default function MRIViewport({ plane }: Props) {
     }
 
     if (show.fov) {
-      renderPlanningBox(ctx, W, H, f);
+      if (isTarget) {
+        ctx.strokeStyle = '#ffe040';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(0, 0, W, H);
+      } else {
+        renderPlanningBox(ctx, W, H, fov[targetPlane]);
+      }
     }
 
     if (show.sliceMarkers && sl.max > 1) {
@@ -405,7 +480,6 @@ export default function MRIViewport({ plane }: Props) {
       ctx.fillRect(0,0,W,sweepY);
     }
 
-    const seq = state.sequences.find(s => s.id === state.selectedSeqId);
     ctx.font = 'bold 9.5px Roboto Mono, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillStyle = PLANE_COLOR[plane];
     ctx.fillText(PLANE_LABEL[plane], 6, 5);
