@@ -19,6 +19,7 @@ const PhysicsPanel  = dynamic(() => import('@/components/simulation/PhysicsPanel
 const LearningPanel = dynamic(() => import('@/components/learning/LearningPanel'),{ ssr: false });
 const AIAssistant   = dynamic(() => import('@/components/ai/AIAssistant'),       { ssr: false });
 const ImageImport   = dynamic(() => import('@/components/viewer/ImageImport'),   { ssr: false });
+const SplashScreen  = dynamic(() => import('@/components/layout/SplashScreen'),  { ssr: false });
 
 export default function WorkstationPage() {
   const {
@@ -26,9 +27,6 @@ export default function WorkstationPage() {
     showHelp, showPatient, showPhysics, showLearning, showAI,
     setImage, setStatusMsg, setSlice, showImageImport,
   } = useWorkstationStore();
-
-  // ── Auto-load real MRI images on first render ──────────────────────────────
-  // Removed in Module 12: Viewports start blank until user manually imports.
 
   // ── Cine Loop Simulation ───────────────────────────────────────────────────
   useEffect(() => {
@@ -69,6 +67,8 @@ export default function WorkstationPage() {
   }, []);
 
   return (
+    <>
+    <SplashScreen />
     <div id="workstation" style={{
       display: 'grid',
       gridTemplateRows: '36px 1fr 260px 20px',
@@ -158,5 +158,6 @@ export default function WorkstationPage() {
         }}
       />
     </div>
+    </>
   );
 }

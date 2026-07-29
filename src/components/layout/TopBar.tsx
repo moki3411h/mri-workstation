@@ -116,10 +116,9 @@ export default function TopBar() {
       <input type="file" ref={loadFileRef} style={{ display:'none' }} accept=".json" onChange={handleLoadExam} />
 
       {/* Logo */}
-      <div style={{ display:'flex', alignItems:'baseline', gap:'2px', padding:'0 10px', flexShrink:0 }}>
-        <span style={{ fontWeight:800, fontSize:'13px', letterSpacing:'2px', color:'#22d3ee', fontFamily:'Inter,sans-serif' }}>MRI</span>
-        <span style={{ fontWeight:700, fontSize:'13px', letterSpacing:'2px', color:'#475569', fontFamily:'Inter,sans-serif' }}>PRO</span>
-        <span style={{ fontSize:'7px', color:'#334155', letterSpacing:'1px', marginLeft:'3px', fontFamily:'Inter,sans-serif' }}>WORKSTATION</span>
+      <div style={{ display:'flex', alignItems:'center', gap:'6px', padding:'0 10px', flexShrink:0 }}>
+        <img src="/logo-icon.png" alt="MRI Pro Icon" style={{ height: '22px', width: 'auto' }} />
+        <span style={{ fontWeight:800, fontSize:'13px', letterSpacing:'2px', color:'#22d3ee', fontFamily:'Inter,sans-serif' }}>MRI PRO</span>
       </div>
 
       <div style={{ width:'1px', height:'20px', background:'#1e293b', flexShrink:0 }} />
