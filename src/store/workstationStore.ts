@@ -326,7 +326,38 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
 
   setFov:    (plane, fov)    => set(s => ({ fov:   { ...s.fov,   [plane]: { ...s.fov[plane],   ...fov  } } })),
   setXhair:  (plane, pos)    => set(s => ({ xhair: { ...s.xhair, [plane]: pos } })),
-  setSlice:  (plane, cur)    => set(s => ({ slice: { ...s.slice, [plane]: { ...s.slice[plane], cur: Math.max(1, Math.min(s.slice[plane].max, cur)) } } })),
+  setSlice:  (plane, cur)    => set(s => {
+    const sl = s.slice[plane];
+    const safeCur = Math.max(1, Math.min(sl.max, cur));
+    const t = sl.max > 1 ? (safeCur - 1) / (sl.max - 1) : 0.5;
+    
+    // Determine active target plane to resize the correct FOV
+    const seq = s.sequences.find(sq => sq.id === s.selectedSeqId);
+    let targetPlane: Plane = 'axial';
+    if (seq) {
+      const lower = seq.name.toLowerCase();
+      if (lower.includes('axial')) targetPlane = 'axial';
+      else if (lower.includes('coronal')) targetPlane = 'coronal';
+      else if (lower.includes('sagittal')) targetPlane = 'sagittal';
+    }
+
+    // Brain size peaks at middle slice
+    const scale = 0.6 + 0.4 * Math.sin(t * Math.PI); 
+
+    let baseW = 0.5, baseH = 0.5;
+    if (targetPlane === 'axial') {
+      baseW = 0.65; baseH = 0.25; // Horizontal Siemens box
+    } else if (targetPlane === 'sagittal') {
+      baseW = 0.25; baseH = 0.65; // Vertical Siemens box
+    } else if (targetPlane === 'coronal') {
+      baseW = 0.4; baseH = 0.6; // Vertical-ish
+    }
+
+    return { 
+      slice: { ...s.slice, [plane]: { ...sl, cur: safeCur } },
+      fov: { ...s.fov, [targetPlane]: { ...s.fov[targetPlane], w: baseW * scale, h: baseH * scale } }
+    };
+  }),
   setWL:     (plane, wl)     => set(s => ({ wl:    { ...s.wl,    [plane]: { ...s.wl[plane],    ...wl   } } })),
   setActiveVP: (plane)       => set({ activeVP: plane }),
   setImage:  (plane, url)    => set(s => ({ images: { ...s.images, [plane]: url } })),
