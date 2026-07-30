@@ -203,7 +203,7 @@ function computePhysics(p: ParamsState) {
 
 export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   sequences:    [...SEQUENCES],
-  selectedSeqId: 3,
+  selectedSeqId: 1,
   scan:         { running:false, paused:false, seqId:null, progress:0, remainSec:0 },
   params:       defaultParams,
   ...computePhysics(defaultParams),
@@ -228,7 +228,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   showLearning:    false,
   showAI:          false,
   showImageImport: false,
-  statusMsg:     'System Ready — Sequence selected: t2_tse_cor',
+  statusMsg:     'System Ready — Sequence selected: Scout',
   leftCollapsed: false,
   rightCollapsed:false,
   cineMode:      false,

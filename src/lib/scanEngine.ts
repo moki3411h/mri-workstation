@@ -53,19 +53,19 @@ export const SEQUENCES: Sequence[] = [
     id:1, name:'Scout',
     ta:'00:18', sl:3,   tr:20,   te:5,   ti:0,  flipAngle:25, sarPct:12,
     description:'3-plane localizer for head orientation and FOV planning.',
-    status:'done',
+    status:'active',
   },
   {
     id:2, name:'T1 SAG DFP',
     ta:'00:32', sl:19,  tr:542,  te:11,  ti:0,  flipAngle:150, sarPct:55,
     description:'T1-weighted sagittal — anatomy, midline structures, corpus callosum.',
-    status:'done',
+    status:'pending',
   },
   {
     id:3, name:'T2 COR',
     ta:'00:42', sl:24,  tr:5500, te:99,  ti:0,  flipAngle:150, sarPct:48,
     description:'T2-weighted coronal — hippocampi, temporal lobes, cortex.',
-    status:'active',
+    status:'pending',
   },
   {
     id:4, name:'T2 TRA 512',
