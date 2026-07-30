@@ -161,7 +161,18 @@ export default function MRIViewport({ plane }: Props) {
   };
 
   const handleDragMove = (dx: number, dy: number, initFov: FovState): FovState => {
-    return { ...initFov, x: initFov.x + dx, y: initFov.y + dy };
+    let nx = initFov.x + dx;
+    let ny = initFov.y + dy;
+    
+    // Constraint: Prevent center marker from moving outside the image boundaries
+    const cx = nx + initFov.w / 2;
+    const cy = ny + initFov.h / 2;
+    if (cx < 0.05) nx += (0.05 - cx);
+    if (cx > 0.95) nx -= (cx - 0.95);
+    if (cy < 0.05) ny += (0.05 - cy);
+    if (cy > 0.95) ny -= (cy - 0.95);
+
+    return { ...initFov, x: nx, y: ny };
   };
 
   const handleRotate = (pos: {x:number, y:number}, startX: number, startY: number, initFov: FovState, W: number, H: number): FovState => {
@@ -274,7 +285,29 @@ export default function MRIViewport({ plane }: Props) {
     store.setSlice(plane, store.slice[plane].cur + d);
   }
 
-  function onDblClick() {
+  function onDblClick(e: React.MouseEvent) {
+    const c = canvasRef.current;
+    if (c) {
+      const pos = { x:(e.clientX - c.getBoundingClientRect().left)/c.width, y:(e.clientY - c.getBoundingClientRect().top)/c.height };
+      const currentState = useWorkstationStore.getState();
+      const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
+      let targetPlane = plane;
+      if (seq) {
+        const lower = seq.name.toLowerCase();
+        if (lower.includes('axial')) targetPlane = 'axial';
+        else if (lower.includes('coronal')) targetPlane = 'coronal';
+        else if (lower.includes('sagittal')) targetPlane = 'sagittal';
+      }
+      if (targetPlane !== plane) {
+        const h = hitHandle(pos.x, pos.y, currentState.fov[targetPlane], c.width, c.height);
+        if (h === 'rotate' || h === 'move') {
+          updateOrthogonalViews(targetPlane, { ...currentState.fov[targetPlane], rot: 0 });
+          toast('FOV Rotation Reset', 'success');
+          return;
+        }
+      }
+    }
+    
     store.resetViewport(plane);
     zoom.current = 1;
     toast(`${PLANE_LABEL[plane]} reset`, 'success');
@@ -358,6 +391,13 @@ export default function MRIViewport({ plane }: Props) {
     ctx.fillStyle = '#ffe040';
     ctx.font = '10px sans-serif';
     ctx.fillText(`FOV ${Math.round(bw)}`, hw + 5, hh + 10);
+    if (Math.abs(f.rot) > 0.5) {
+      // Normalize angle for display (-180 to 180)
+      let displayRot = f.rot % 360;
+      if (displayRot > 180) displayRot -= 360;
+      if (displayRot < -180) displayRot += 360;
+      ctx.fillText(`Ang ${Math.round(displayRot)}°`, hw + 5, hh + 22);
+    }
     
     // Draw tiny handles
     const handles:[number,number][]=[[-hw,-hh],[0,-hh],[hw,-hh],[hw,0],[hw,hh],[0,hh],[-hw,hh],[-hw,0]];
