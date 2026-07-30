@@ -329,7 +329,6 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   setSlice:  (plane, cur)    => set(s => {
     const sl = s.slice[plane];
     const safeCur = Math.max(1, Math.min(sl.max, cur));
-    const t = sl.max > 1 ? (safeCur - 1) / (sl.max - 1) : 0.5;
     
     // Determine active target plane to resize the correct FOV
     const seq = s.sequences.find(sq => sq.id === s.selectedSeqId);
@@ -341,21 +340,25 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
       else if (lower.includes('sagittal')) targetPlane = 'sagittal';
     }
 
+    // Calculate previous scale and new scale to find the relative change ratio
+    const prevT = sl.max > 1 ? (sl.cur - 1) / (sl.max - 1) : 0.5;
+    const newT = sl.max > 1 ? (safeCur - 1) / (sl.max - 1) : 0.5;
+    
     // Brain size peaks at middle slice
-    const scale = 0.6 + 0.4 * Math.sin(t * Math.PI); 
+    const prevScale = 0.6 + 0.4 * Math.sin(prevT * Math.PI); 
+    const newScale = 0.6 + 0.4 * Math.sin(newT * Math.PI); 
+    
+    // Ratio of change
+    const ratio = newScale / prevScale;
 
-    let baseW = 0.5, baseH = 0.5;
-    if (targetPlane === 'axial') {
-      baseW = 0.65; baseH = 0.25; // Horizontal Siemens box
-    } else if (targetPlane === 'sagittal') {
-      baseW = 0.25; baseH = 0.65; // Vertical Siemens box
-    } else if (targetPlane === 'coronal') {
-      baseW = 0.4; baseH = 0.6; // Vertical-ish
-    }
+    // Apply ratio to current FOV size to preserve user dragging
+    const currFov = s.fov[targetPlane];
+    const newW = Math.max(0.1, currFov.w * ratio);
+    const newH = Math.max(0.1, currFov.h * ratio);
 
     return { 
       slice: { ...s.slice, [plane]: { ...sl, cur: safeCur } },
-      fov: { ...s.fov, [targetPlane]: { ...s.fov[targetPlane], w: baseW * scale, h: baseH * scale } }
+      fov: { ...s.fov, [targetPlane]: { ...currFov, w: newW, h: newH } }
     };
   }),
   setWL:     (plane, wl)     => set(s => ({ wl:    { ...s.wl,    [plane]: { ...s.wl[plane],    ...wl   } } })),

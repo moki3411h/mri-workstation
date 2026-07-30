@@ -184,11 +184,15 @@ export default function MRIViewport({ plane }: Props) {
     const ndx = ldx / W;
     const ndy = ldy / H;
 
-    // Expand based on handle, adjusting local origin
-    if (handle.includes('right'))  w = Math.max(MIN_SIZE, initFov.w + ndx);
-    if (handle.includes('left')) { const nw = Math.max(MIN_SIZE, initFov.w - ndx); const dw = initFov.w - nw; x += dw * Math.cos(ang); y += dw * Math.sin(ang * (W/H)); w = nw; }
-    if (handle.includes('bottom')) h = Math.max(MIN_SIZE, initFov.h + ndy);
-    if (handle.includes('top'))  { const nh = Math.max(MIN_SIZE, initFov.h - ndy); const dh = initFov.h - nh; x -= dh * Math.sin(ang * (H/W)); y += dh * Math.cos(ang); h = nh; }
+    const isRight = handle === 'right' || handle === 'tr' || handle === 'br';
+    const isLeft = handle === 'left' || handle === 'tl' || handle === 'bl';
+    const isBottom = handle === 'bottom' || handle === 'bl' || handle === 'br';
+    const isTop = handle === 'top' || handle === 'tl' || handle === 'tr';
+
+    if (isRight)  w = Math.max(MIN_SIZE, initFov.w + ndx);
+    if (isLeft) { const nw = Math.max(MIN_SIZE, initFov.w - ndx); const dw = initFov.w - nw; x += dw * Math.cos(ang); y += dw * Math.sin(ang * (W/H)); w = nw; }
+    if (isBottom) h = Math.max(MIN_SIZE, initFov.h + ndy);
+    if (isTop)  { const nh = Math.max(MIN_SIZE, initFov.h - ndy); const dh = initFov.h - nh; x -= dh * Math.sin(ang * (H/W)); y += dh * Math.cos(ang); h = nh; }
     
     nf.x = x; nf.y = y; nf.w = w; nf.h = h;
     return nf;
@@ -341,6 +345,13 @@ export default function MRIViewport({ plane }: Props) {
     } else {
       ctx.moveTo(0, -H*2); ctx.lineTo(0, H*2);
     }
+    ctx.stroke();
+
+    // Center circle (like Siemens target)
+    ctx.beginPath();
+    ctx.strokeStyle = '#ffe040';
+    ctx.lineWidth = 1.5;
+    ctx.arc(0, 0, 8, 0, Math.PI*2);
     ctx.stroke();
 
     // Siemens text
