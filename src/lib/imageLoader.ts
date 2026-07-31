@@ -39,6 +39,10 @@ export function readFileAsDataURL(file: File): Promise<string> {
 
 export function grayscaleDataURL(dataURL: string): Promise<string> {
   return new Promise(resolve => {
+    if (!dataURL.startsWith('data:image/')) {
+      resolve(dataURL);
+      return;
+    }
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');

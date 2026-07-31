@@ -105,18 +105,24 @@ export default function MRIViewport({ plane }: Props) {
     const hw = (f.w/2) * W;
     const hh = (f.h/2) * H;
     
-    // Handles in pixels
-    const handles = [
-      {n:'tl',lx:-hw,ly:-hh},{n:'top',lx:0,ly:-hh},{n:'tr',lx:hw,ly:-hh},
-      {n:'right',lx:hw,ly:0},{n:'br',lx:hw,ly:hh},{n:'bottom',lx:0,ly:hh},
-      {n:'bl',lx:-hw,ly:hh},{n:'left',lx:-hw,ly:0},
-      {n:'rotate',lx:0,ly:-hh-18}, // matching render (-hh-18)
+    // Handles and corners in pixels
+    const corners = [
+      {n:'tl',lx:-hw,ly:-hh},{n:'tr',lx:hw,ly:-hh},
+      {n:'br',lx:hw,ly:hh},{n:'bl',lx:-hw,ly:hh},
+      {n:'rotate',lx:0,ly:-hh-20} // match render
     ];
     
-    const HIT_R = 12; // 12 pixels hit radius
-    for (const h of handles) {
+    const HIT_R = 14; 
+    for (const h of corners) {
       if (Math.hypot(lx - h.lx, ly - h.ly) < HIT_R) return h.n;
     }
+
+    // Edges
+    const EDGE_R = 10;
+    if (Math.abs(ly - (-hh)) < EDGE_R && Math.abs(lx) <= hw) return 'top';
+    if (Math.abs(ly - (hh)) < EDGE_R && Math.abs(lx) <= hw) return 'bottom';
+    if (Math.abs(lx - (-hw)) < EDGE_R && Math.abs(ly) <= hh) return 'left';
+    if (Math.abs(lx - (hw)) < EDGE_R && Math.abs(ly) <= hh) return 'right';
     
     if (Math.abs(lx) < hw && Math.abs(ly) < hh) return 'move';
     return null;
