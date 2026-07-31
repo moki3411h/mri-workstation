@@ -58,5 +58,5 @@ export function grayscaleDataURL(dataURL: string): Promise<string> {
   });
 }
 
-export const ACCEPTED_TYPES = ['image/jpeg','image/png','image/bmp','image/tiff','image/webp'];
-export const ACCEPTED_EXT   = '.jpg,.jpeg,.png,.bmp,.tif,.tiff,.webp,.dcm';
+export const ACCEPTED_TYPES = ['image/jpeg','image/png','image/bmp','image/tiff','image/webp','video/mp4','application/pdf'];
+export const ACCEPTED_EXT   = '.jpg,.jpeg,.png,.bmp,.tif,.tiff,.webp,.dcm,.mp4,.pdf';

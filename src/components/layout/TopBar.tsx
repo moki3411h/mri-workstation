@@ -233,7 +233,7 @@ export default function TopBar() {
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background='rgba(34,211,238,0.08)'; }}
         >
           🧠 Load MRI
-          <input type="file" accept="image/*" style={{ display:'none' }} onChange={handleFileUpload} aria-label="Upload MRI image" />
+          <input type="file" accept="image/*,video/mp4,application/pdf" style={{ display:'none' }} onChange={handleFileUpload} aria-label="Upload MRI image" />
         </label>
 
         {/* Physics */}

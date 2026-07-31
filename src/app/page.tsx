@@ -139,7 +139,7 @@ export default function WorkstationPage() {
       <input
         id="global-file-input"
         type="file"
-        accept=".jpg,.jpeg,.png,.bmp,.tif,.tiff,.webp"
+        accept=".jpg,.jpeg,.png,.bmp,.tif,.tiff,.webp,.mp4,video/mp4,.pdf,application/pdf"
         multiple
         style={{ display: 'none' }}
         onChange={e => {

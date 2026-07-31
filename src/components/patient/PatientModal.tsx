@@ -1,325 +1,396 @@
 'use client';
-import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useWorkstationStore } from '@/store/workstationStore';
 import { toast } from '@/lib/toast';
 
-// ─── Stable form field (never loses focus) ─────────────────────────────────
-interface FieldProps {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-  required?: boolean;
-  tabIndex?: number;
-  readOnly?: boolean;
-}
+const styles = {
+  window: {
+    background: '#c0c0c0',
+    border: '2px solid',
+    borderTopColor: '#ffffff',
+    borderLeftColor: '#ffffff',
+    borderRightColor: '#808080',
+    borderBottomColor: '#808080',
+    boxShadow: '1px 1px 0 #000',
+    fontFamily: 'Tahoma, Arial, sans-serif',
+    fontSize: '11px',
+    color: '#000',
+    width: '740px',
+  },
+  titleBar: {
+    background: 'linear-gradient(90deg, #000080, #1084d0)',
+    color: '#fff',
+    padding: '2px 4px',
+    fontWeight: 'bold',
+    fontSize: '11px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '4px',
+  },
+  closeBtn: {
+    background: '#c0c0c0',
+    color: '#000',
+    border: '1px solid',
+    borderTopColor: '#fff',
+    borderLeftColor: '#fff',
+    borderRightColor: '#808080',
+    borderBottomColor: '#808080',
+    width: '14px',
+    height: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'default',
+    fontWeight: 'bold',
+    fontSize: '9px',
+    padding: 0,
+    lineHeight: 1,
+  },
+  panel: {
+    display: 'flex',
+    border: '2px solid',
+    borderTopColor: '#808080',
+    borderLeftColor: '#808080',
+    borderRightColor: '#ffffff',
+    borderBottomColor: '#ffffff',
+    marginBottom: '4px',
+    background: '#c0c0c0',
+  },
+  tab: {
+    background: '#9ca9b5', // slightly blue-ish gray
+    color: '#000',
+    width: '20px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    paddingTop: '6px',
+    fontWeight: 'bold',
+    fontSize: '12px',
+    letterSpacing: '2px',
+    borderRight: '1px solid #808080',
+  },
+  tabChar: {
+    transform: 'rotate(90deg)',
+    display: 'inline-block',
+    marginBottom: '4px'
+  },
+  formContent: {
+    padding: '8px 12px',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '4px',
+  },
+  row: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  label: {
+    width: '130px',
+    textAlign: 'right' as const,
+    paddingRight: '10px',
+    color: '#000',
+  },
+  input: {
+    border: '1px solid',
+    borderTopColor: '#808080',
+    borderLeftColor: '#808080',
+    borderRightColor: '#ffffff',
+    borderBottomColor: '#ffffff',
+    background: '#fff',
+    padding: '2px 4px',
+    fontSize: '11px',
+    color: '#000',
+    fontFamily: 'Tahoma, Arial, sans-serif',
+    outline: 'none',
+  },
+  inputReadonly: {
+    background: '#d4d0c8',
+    color: '#808080',
+  },
+  button: {
+    background: '#c0c0c0',
+    border: '1px solid',
+    borderTopColor: '#ffffff',
+    borderLeftColor: '#ffffff',
+    borderRightColor: '#808080',
+    borderBottomColor: '#808080',
+    padding: '2px 12px',
+    fontSize: '11px',
+    color: '#000',
+    fontFamily: 'Tahoma, Arial, sans-serif',
+    cursor: 'pointer',
+    outline: 'none',
+    minWidth: '70px',
+  },
+  buttonActive: {
+    borderTopColor: '#808080',
+    borderLeftColor: '#808080',
+    borderRightColor: '#ffffff',
+    borderBottomColor: '#ffffff',
+    paddingTop: '3px',
+    paddingLeft: '13px',
+    paddingRight: '11px',
+    paddingBottom: '1px',
+    background: '#d4d0c8',
+  }
+};
 
-const Field = memo(function Field({ label, value, onChange, type = 'text', placeholder, required, tabIndex, readOnly }: FieldProps) {
-  const ref = useRef<HTMLInputElement>(null);
-  return (
-    <div style={{ display:'flex', flexDirection:'column', marginBottom:'8px' }}>
-      <label style={{ fontSize:'8px', color:'#475569', marginBottom:'2px', letterSpacing:'0.3px', textTransform:'uppercase' }}>
-        {label}{required && <span style={{ color:'#ef4444', marginLeft:'2px' }}>*</span>}
-      </label>
-      <input
-        ref={ref}
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        readOnly={readOnly}
-        tabIndex={tabIndex}
-        autoComplete="off"
-        spellCheck={false}
-        style={{
-          background: readOnly ? '#04060a' : '#060b14',
-          border: `1px solid ${readOnly ? '#1e293b' : '#263040'}`,
-          color: readOnly ? '#475569' : '#e2e8f0',
-          fontFamily: 'Roboto Mono, monospace',
-          fontSize: '10px',
-          padding: '5px 8px',
-          borderRadius: '2px',
-          outline: 'none',
-          transition: 'border-color 0.1s',
-          cursor: readOnly ? 'default' : 'text',
-        }}
-        onFocus={e => { if (!readOnly) (e.target as HTMLInputElement).style.borderColor = '#22d3ee'; }}
-        onBlur={e => { (e.target as HTMLInputElement).style.borderColor = readOnly ? '#1e293b' : '#263040'; }}
-      />
-    </div>
-  );
-});
-
-interface SelectFieldProps {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  tabIndex?: number;
-}
-
-const SelectField = memo(function SelectField({ label, value, onChange, options, tabIndex }: SelectFieldProps) {
-  return (
-    <div style={{ display:'flex', flexDirection:'column', marginBottom:'8px' }}>
-      <label style={{ fontSize:'8px', color:'#475569', marginBottom:'2px', letterSpacing:'0.3px', textTransform:'uppercase' }}>{label}</label>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        tabIndex={tabIndex}
-        style={{ background:'#060b14', border:'1px solid #263040', color:'#e2e8f0', fontFamily:'Roboto Mono,monospace', fontSize:'10px', padding:'5px 6px', borderRadius:'2px', outline:'none' }}
-      >
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-    </div>
-  );
-});
-
-interface CheckRowProps {
-  label: string;
-  sublabel?: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  riskLevel?: 'red' | 'amber' | 'green';
-  tabIndex?: number;
-}
-
-const CheckRow = memo(function CheckRow({ label, sublabel, checked, onChange, riskLevel = 'red', tabIndex }: CheckRowProps) {
-  const color = riskLevel === 'red' ? '#ef4444' : riskLevel === 'amber' ? '#f59e0b' : '#22c55e';
-  return (
-    <label style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'5px 0', borderBottom:'1px solid #0d1520', cursor:'pointer', userSelect:'none' }} tabIndex={tabIndex}>
-      <div style={{ position:'relative', width:'14px', height:'14px', flexShrink:0, marginTop:'1px' }}>
-        <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
-          style={{ position:'absolute', opacity:0, width:0, height:0 }} />
-        <div style={{
-          width:'14px', height:'14px', border:`1px solid ${checked ? color : '#263040'}`,
-          background: checked ? `${color}20` : '#060b14', borderRadius:'2px',
-          display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.1s',
-        }}>
-          {checked && <span style={{ color, fontSize:'10px', lineHeight:'1' }}>✓</span>}
-        </div>
-      </div>
-      <div>
-        <div style={{ fontSize:'9.5px', color: checked ? color : '#64748b' }}>{label}</div>
-        {sublabel && <div style={{ fontSize:'8px', color:'#334155', marginTop:'1px' }}>{sublabel}</div>}
-      </div>
-      {checked && riskLevel !== 'green' && (
-        <div style={{ marginLeft:'auto', fontSize:'7.5px', fontWeight:700, color, background:`${color}10`, border:`1px solid ${color}30`, borderRadius:'2px', padding:'1px 5px', flexShrink:0 }}>
-          {riskLevel === 'red' ? 'HIGH RISK' : 'CAUTION'}
-        </div>
-      )}
-    </label>
-  );
-});
+const VerticalText = ({ text }: { text: string }) => (
+  <div style={styles.tab}>
+    {text.split('').map((char, i) => (
+      <span key={i} style={{ display: 'block', lineHeight: 1.1 }}>{char}</span>
+    ))}
+  </div>
+);
 
 export default function PatientModal() {
-  const { patient, safety, setPatient, setSafety, togglePatient, setStatusMsg } = useWorkstationStore();
+  const { patient, setPatient, togglePatient, setStatusMsg } = useWorkstationStore();
 
-  // ── Local form state (prevents focus loss on store re-renders) ──
   const [form, setForm] = useState({
-    lastName:   patient.name.split(' ')[0] ?? '',
-    firstName:  patient.name.split(' ')[1] ?? '',
-    patientId:  patient.patientId,
-    dob:        patient.dob,
-    age:        String(new Date().getFullYear() - new Date(patient.dob).getFullYear()),
-    sex:        patient.sex,
-    height:     String(patient.height),
-    weight:     String(patient.weight),
-    institution:'City General Hospital',
-    referringMD:'Dr. Smith',
-    procedure:  patient.study,
-    position:   'Head First — Supine',
+    lastName: patient.name.split(' ')[0] ?? '',
+    firstName: patient.name.split(' ')[1] ?? '',
+    title: '',
+    patientId: patient.patientId,
+    dob: patient.dob,
+    age: String(new Date().getFullYear() - new Date(patient.dob).getFullYear()),
+    sex: patient.sex,
+    height: String(patient.height),
+    weight: String(patient.weight),
+    institution: 'City General Hospital',
+    referringMD: 'Dr. Smith',
+    requestingMD: '',
+    admissionID: '',
+    procedure: patient.study,
+    accession: patient.accession,
+    requestID: '',
+    position: 'Head First — Supine',
     additionalInfo: '',
-    emergencyContact: safety.emergencyContact,
   });
-
-  const [safe, setSafeLocal] = useState({ ...safety });
-  const [searchTerm, setSearchTerm] = useState('');
-  const searchRef = useRef<HTMLInputElement>(null);
 
   const F = useCallback((key: keyof typeof form) => (v: string) => {
     setForm(prev => ({ ...prev, [key]: v }));
-    // Auto-calc age from DOB
     if (key === 'dob') {
-      const age = new Date().getFullYear() - new Date(v).getFullYear();
-      setForm(prev => ({ ...prev, dob: v, age: String(age > 0 ? age : 0) }));
+      const yr = new Date(v).getFullYear();
+      if (!isNaN(yr)) {
+        const age = new Date().getFullYear() - yr;
+        setForm(prev => ({ ...prev, dob: v, age: String(age > 0 ? age : 0) }));
+      }
     }
   }, []);
-
-  const isUnsafe = safe.implant || safe.pacemaker;
-  const isWarning = safe.pregnant || safe.contrastAllergy || safe.claustrophobia;
 
   const handleSave = useCallback(() => {
     const fullName = `${form.lastName.toUpperCase()}, ${form.firstName}`;
     setPatient({
       name: fullName.trim() || 'ANONYMOUS',
-      dob:  form.dob,
-      sex:  form.sex,
+      dob: form.dob,
+      sex: form.sex,
       weight: Number(form.weight) || 0,
       height: Number(form.height) || 0,
-      study:  form.procedure,
-      accession: patient.accession,
+      study: form.procedure,
+      accession: form.accession,
       patientId: form.patientId,
     });
-    setSafety({ ...safe, emergencyContact: form.emergencyContact });
     togglePatient();
     setStatusMsg(`Patient registered: ${fullName.trim() || 'ANONYMOUS'}`);
     toast(`Patient registered: ${fullName.trim() || 'ANONYMOUS'}`, 'success');
-  }, [form, safe, setPatient, setSafety, togglePatient, setStatusMsg, patient.accession]);
+  }, [form, setPatient, togglePatient, setStatusMsg]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') togglePatient();
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSave();
-  }, [togglePatient, handleSave]);
-
-  // Trap focus inside modal
+  // Trap focus / Escape
   useEffect(() => {
-    const focusTrap = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
-      // Handled natively by tabIndex ordering
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') togglePatient();
     };
-    document.addEventListener('keydown', focusTrap);
-    return () => document.removeEventListener('keydown', focusTrap);
-  }, []);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [togglePatient]);
 
   return (
-    <div
-      className="modal-overlay"
-      onKeyDown={handleKeyDown}
-      onClick={e => { if (e.target === e.currentTarget) togglePatient(); }}
-    >
-      <div className="modal-box" style={{ width: '760px', maxWidth: '96vw' }}>
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) togglePatient(); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={styles.window} onClick={e => e.stopPropagation()}>
+        
+        {/* Title Bar */}
+        <div style={styles.titleBar}>
+          <span>Patient Registration</span>
+          <button style={styles.closeBtn} onClick={togglePatient}>x</button>
+        </div>
 
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <div style={{ display:'flex', alignItems:'center', padding:'10px 16px', borderBottom:'1px solid #1e3a5f', background:'rgba(14,165,233,0.05)', flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-            <div style={{ width:'28px', height:'28px', background:'rgba(34,211,238,0.1)', border:'1px solid rgba(34,211,238,0.25)', borderRadius:'2px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px' }}>👤</div>
-            <div>
-              <div style={{ fontSize:'12px', fontWeight:700, color:'#e2e8f0' }}>Patient Registration</div>
-              <div style={{ fontSize:'8.5px', color:'#475569' }}>Register new patient — MRI Safety Clearance Required</div>
+        <div style={{ padding: '2px 4px 6px 4px', display: 'flex', gap: '4px' }}>
+          
+          {/* Left Column */}
+          <div style={{ flex: 1.1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            
+            {/* PATIENT */}
+            <div style={styles.panel}>
+              <VerticalText text="PATIENT" />
+              <div style={styles.formContent}>
+                <div style={styles.row}>
+                  <div style={styles.label}>Last name</div>
+                  <input style={{ ...styles.input, flex: 1 }} value={form.lastName} onChange={e => F('lastName')(e.target.value)} />
+                </div>
+                <div style={styles.row}>
+                  <div style={styles.label}>First name</div>
+                  <input style={{ ...styles.input, flex: 1 }} value={form.firstName} onChange={e => F('firstName')(e.target.value)} />
+                </div>
+                <div style={styles.row}>
+                  <div style={styles.label}>Title</div>
+                  <input style={{ ...styles.input, width: '60px' }} value={form.title} onChange={e => F('title')(e.target.value)} />
+                </div>
+                <div style={styles.row}>
+                  <div style={styles.label}>Patient ID</div>
+                  <input style={{ ...styles.input, flex: 1 }} value={form.patientId} onChange={e => F('patientId')(e.target.value)} />
+                </div>
+                <div style={styles.row}>
+                  <div style={styles.label}>Date of birth</div>
+                  <div style={{ display: 'flex', flex: 1, gap: '4px', alignItems: 'center' }}>
+                    <input style={{ ...styles.input, width: '90px' }} type="date" value={form.dob} onChange={e => F('dob')(e.target.value)} />
+                    <span style={{ color: '#808080' }}>[dd-MMM-yy]</span>
+                  </div>
+                </div>
+                <div style={styles.row}>
+                  <div style={styles.label}>Sex</div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <label><input type="radio" name="sex" checked={form.sex === 'M'} onChange={() => F('sex')('M')} /> Male</label>
+                    <label><input type="radio" name="sex" checked={form.sex === 'F'} onChange={() => F('sex')('F')} /> Female</label>
+                    <label><input type="radio" name="sex" checked={form.sex === 'Other'} onChange={() => F('sex')('Other')} /> Other</label>
+                  </div>
+                </div>
+                <div style={styles.row}>
+                  <div style={styles.label}>Age</div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <input style={{ ...styles.input, width: '40px' }} value={form.age} onChange={e => F('age')(e.target.value)} />
+                    <select style={styles.input}>
+                      <option>Years</option>
+                      <option>Months</option>
+                      <option>Days</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={styles.row}>
+                  <div style={styles.label}>Height</div>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <input style={{ ...styles.input, width: '40px' }} value={form.height} onChange={e => F('height')(e.target.value)} />
+                    <span>cm</span>
+                  </div>
+                </div>
+                <div style={styles.row}>
+                  <div style={styles.label}>Weight</div>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flex: 1 }}>
+                    <input style={{ ...styles.input, width: '40px' }} value={form.weight} onChange={e => F('weight')(e.target.value)} />
+                    <span>kg</span>
+                    <label style={{ marginLeft: '16px' }}><input type="checkbox" defaultChecked /> Metric</label>
+                  </div>
+                </div>
+                <div style={{ ...styles.row, alignItems: 'flex-start', marginTop: '4px' }}>
+                  <div style={styles.label}>Additional info</div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <textarea style={{ ...styles.input, height: '40px', resize: 'none' }} value={form.additionalInfo} onChange={e => F('additionalInfo')(e.target.value)} />
+                    <button style={{ ...styles.button, width: '60px', alignSelf: 'center', marginTop: '4px' }}>Details</button>
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {/* HOSPITAL */}
+            <div style={styles.panel}>
+              <VerticalText text="HOSPITAL" />
+              <div style={styles.formContent}>
+                <div style={styles.row}>
+                  <div style={styles.label}>Referring physician</div>
+                  <select style={{ ...styles.input, flex: 1 }} value={form.referringMD} onChange={e => F('referringMD')(e.target.value)}>
+                    <option>{form.referringMD}</option>
+                  </select>
+                </div>
+                <div style={styles.row}>
+                  <div style={styles.label}>Requesting physician</div>
+                  <select style={{ ...styles.input, flex: 1 }} value={form.requestingMD} onChange={e => F('requestingMD')(e.target.value)}>
+                    <option></option>
+                  </select>
+                </div>
+                <div style={styles.row}>
+                  <div style={styles.label}>Admission ID</div>
+                  <input style={{ ...styles.input, flex: 1 }} value={form.admissionID} onChange={e => F('admissionID')(e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons Left */}
+            <div style={{ display: 'flex', gap: '6px', paddingLeft: '8px', marginTop: '4px' }}>
+              <button style={styles.button}>Preregister</button>
+              <button style={{ ...styles.button, ...styles.buttonActive }} onClick={handleSave}>Exam</button>
+              <button style={styles.button}>Search</button>
+              <button style={styles.button} onClick={togglePatient}>Cancel</button>
+            </div>
+
           </div>
-          <div style={{ marginLeft:'auto', display:'flex', gap:'6px', alignItems:'center' }}>
-            <div style={{ position:'relative' }}>
-              <input
-                ref={searchRef}
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="🔍 Search patient…"
-                style={{ background:'#060b14', border:'1px solid #263040', color:'#94a3b8', fontFamily:'Roboto Mono,monospace', fontSize:'9.5px', padding:'4px 10px', borderRadius:'2px', outline:'none', width:'160px' }}
-              />
+
+          {/* Right Column */}
+          <div style={{ flex: 0.9, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            
+            {/* PROCEDURE */}
+            <div style={{ ...styles.panel, flex: 0.65 }}>
+              <VerticalText text="PROCEDURE" />
+              <div style={styles.formContent}>
+                <div style={styles.row}>
+                  <div style={{ ...styles.label, width: '100px' }}>Accession No</div>
+                  <input style={{ ...styles.input, flex: 1 }} value={form.accession} onChange={e => F('accession')(e.target.value)} />
+                </div>
+                <div style={styles.row}>
+                  <div style={{ ...styles.label, width: '100px' }}>Request ID</div>
+                  <input style={{ ...styles.input, flex: 1 }} value={form.requestID} onChange={e => F('requestID')(e.target.value)} />
+                </div>
+                <div style={{ ...styles.row, alignItems: 'flex-start' }}>
+                  <div style={{ ...styles.label, width: '100px' }}>Requested<br/>procedure(s)</div>
+                  <textarea style={{ ...styles.input, flex: 1, height: '40px', resize: 'none' }} value={form.procedure} onChange={e => F('procedure')(e.target.value)} />
+                </div>
+                <div style={styles.row}>
+                  <div style={{ ...styles.label, width: '100px' }}>Patient position</div>
+                  <select style={{ ...styles.input, flex: 1 }} value={form.position} onChange={e => F('position')(e.target.value)}>
+                    <option>Head First — Supine</option>
+                    <option>Head First — Prone</option>
+                    <option>Feet First — Supine</option>
+                    <option>Feet First — Prone</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <button onClick={togglePatient} style={{ background:'transparent', border:'none', color:'#64748b', fontSize:'18px', cursor:'pointer', padding:'0 4px' }}>✕</button>
+
+            {/* INSTITUTION */}
+            <div style={{ ...styles.panel, flex: 0.35 }}>
+              <VerticalText text="INSTITUTION" />
+              <div style={styles.formContent}>
+                <div style={styles.row}>
+                  <div style={{ ...styles.label, width: '120px' }}>Institution name</div>
+                  <select style={{ ...styles.input, flex: 1 }} value={form.institution} onChange={e => F('institution')(e.target.value)}>
+                    <option>{form.institution}</option>
+                  </select>
+                </div>
+                <div style={styles.row}>
+                  <div style={{ ...styles.label, width: '120px' }}>1. Performing physician</div>
+                  <select style={{ ...styles.input, flex: 1 }}><option></option></select>
+                </div>
+                <div style={styles.row}>
+                  <div style={{ ...styles.label, width: '120px' }}>1. Operator</div>
+                  <select style={{ ...styles.input, flex: 1 }}><option></option></select>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ flex: 1 }} /> {/* Empty space bottom right */}
+
+            {/* Action Buttons Right */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: '4px', marginTop: '4px' }}>
+              <button style={styles.button}>Help</button>
+            </div>
+            
           </div>
         </div>
 
-        {/* ── Two-column body ────────────────────────────────────────── */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0', overflowY:'auto', maxHeight:'68vh' }}>
-
-          {/* ── LEFT: Patient Information ─────────────────────────── */}
-          <div style={{ padding:'14px 16px', borderRight:'1px solid #1e293b', overflowY:'auto' }}>
-            <div style={{ fontSize:'9px', fontWeight:700, color:'#22d3ee', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:'12px', paddingBottom:'4px', borderBottom:'1px solid #1e293b' }}>
-              Patient Information
-            </div>
-
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 10px' }}>
-              <Field label="Last Name" value={form.lastName} onChange={F('lastName')} required placeholder="SMITH" tabIndex={1} />
-              <Field label="First Name" value={form.firstName} onChange={F('firstName')} placeholder="John" tabIndex={2} />
-            </div>
-
-            <Field label="Patient ID" value={form.patientId} onChange={F('patientId')} placeholder="MR-001" tabIndex={3} />
-
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 60px', gap:'0 10px' }}>
-              <Field label="Date of Birth" value={form.dob} onChange={F('dob')} type="date" tabIndex={4} />
-              <Field label="Age" value={form.age} onChange={F('age')} placeholder="49" tabIndex={5} readOnly />
-            </div>
-
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 10px' }}>
-              <SelectField label="Sex" value={form.sex} onChange={F('sex')} options={['M','F','Other']} tabIndex={6} />
-              <Field label="Weight kg" value={form.weight} onChange={F('weight')} type="text" placeholder="75" tabIndex={7} />
-              <Field label="Height cm" value={form.height} onChange={F('height')} type="text" placeholder="175" tabIndex={8} />
-            </div>
-
-            <div style={{ borderTop:'1px solid #1e293b', paddingTop:'10px', marginTop:'4px' }}>
-              <div style={{ fontSize:'9px', fontWeight:700, color:'#22d3ee', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:'10px' }}>Study Information</div>
-              <Field label="Institution" value={form.institution} onChange={F('institution')} tabIndex={9} />
-              <Field label="Referring Physician" value={form.referringMD} onChange={F('referringMD')} tabIndex={10} />
-              <Field label="Procedure / Study" value={form.procedure} onChange={F('procedure')} tabIndex={11} />
-              <SelectField label="Patient Position" value={form.position} onChange={F('position')} tabIndex={12}
-                options={['Head First — Supine','Head First — Prone','Feet First — Supine','Feet First — Prone']} />
-              <Field label="Additional Information" value={form.additionalInfo} onChange={F('additionalInfo')} placeholder="Optional notes…" tabIndex={13} />
-              <Field label="Emergency Contact" value={form.emergencyContact} onChange={F('emergencyContact')} placeholder="Name & phone" tabIndex={14} />
-            </div>
-          </div>
-
-          {/* ── RIGHT: Safety Checklist ────────────────────────────── */}
-          <div style={{ padding:'14px 16px', background:'rgba(0,0,0,0.15)', overflowY:'auto' }}>
-            <div style={{ fontSize:'9px', fontWeight:700, color:'#22d3ee', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:'12px', paddingBottom:'4px', borderBottom:'1px solid #1e293b' }}>
-              MRI Safety Screening
-            </div>
-
-            {/* Warning banner */}
-            {(isUnsafe || isWarning) && (
-              <div style={{ marginBottom:'10px', padding:'7px 10px', background:`rgba(${isUnsafe?'239,68,68':'245,158,11'},0.1)`, border:`1px solid rgba(${isUnsafe?'239,68,68':'245,158,11'},0.4)`, borderRadius:'2px' }}>
-                <div style={{ fontSize:'9px', fontWeight:700, color: isUnsafe?'#ef4444':'#f59e0b' }}>
-                  {isUnsafe ? '⚠ CONTRAINDICATION DETECTED' : '⚠ CAUTION — VERIFY BEFORE SCANNING'}
-                </div>
-                <div style={{ fontSize:'8.5px', color:'#94a3b8', marginTop:'2px' }}>
-                  {isUnsafe
-                    ? 'Patient has reported a metallic implant or cardiac device. DO NOT PROCEED without radiologist clearance and implant MR-safety verification.'
-                    : 'One or more precautions flagged. Review and confirm with radiologist.'}
-                </div>
-              </div>
-            )}
-
-            <div style={{ marginBottom:'6px', fontSize:'8px', color:'#334155', fontWeight:700, letterSpacing:'0.3px' }}>ABSOLUTE CONTRAINDICATIONS</div>
-            <CheckRow label="Metallic Implant" sublabel="Any device, plate, screw, stent, clip, or shrapnel" checked={safe.implant} onChange={v => setSafeLocal(s => ({...s, implant:v}))} riskLevel="red" />
-            <CheckRow label="Pacemaker / ICD / Neurostimulator" sublabel="Cardiac or neural implanted electronic device" checked={safe.pacemaker} onChange={v => setSafeLocal(s => ({...s, pacemaker:v}))} riskLevel="red" />
-
-            <div style={{ marginTop:'10px', marginBottom:'6px', fontSize:'8px', color:'#334155', fontWeight:700, letterSpacing:'0.3px' }}>RELATIVE CONTRAINDICATIONS</div>
-            <CheckRow label="Pregnancy" sublabel="Known or suspected (especially 1st trimester)" checked={safe.pregnant} onChange={v => setSafeLocal(s => ({...s, pregnant:v}))} riskLevel="amber" />
-            <CheckRow label="Contrast Media Allergy" sublabel="Prior reaction to gadolinium-based agents" checked={safe.contrastAllergy} onChange={v => setSafeLocal(s => ({...s, contrastAllergy:v}))} riskLevel="amber" />
-            <CheckRow label="Claustrophobia" sublabel="Requires sedation protocol if severe" checked={safe.claustrophobia} onChange={v => setSafeLocal(s => ({...s, claustrophobia:v}))} riskLevel="amber" />
-
-            <div style={{ marginTop:'10px', marginBottom:'6px', fontSize:'8px', color:'#334155', fontWeight:700, letterSpacing:'0.3px' }}>HISTORY</div>
-            <CheckRow label="Previous MRI — No Adverse Events" sublabel="Patient has undergone MRI before without issues" checked={safe.previousMRI} onChange={v => setSafeLocal(s => ({...s, previousMRI:v}))} riskLevel="green" />
-
-            {/* SAR / Weight notice */}
-            <div style={{ marginTop:'12px', padding:'8px', background:'#0d1626', border:'1px solid #1e293b', borderRadius:'2px' }}>
-              <div style={{ fontSize:'8px', color:'#475569', marginBottom:'4px', fontWeight:700 }}>SAR ESTIMATE (body weight)</div>
-              <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-                <div style={{ flex:1, height:'5px', background:'#1c2a3e', borderRadius:'2px', overflow:'hidden' }}>
-                  <div style={{ height:'100%', width: `${Math.min(100, (Number(form.weight)/120)*100)}%`, background:'#22c55e' }} />
-                </div>
-                <span style={{ fontFamily:'Roboto Mono,monospace', fontSize:'9px', color:'#64748b' }}>{form.weight} kg</span>
-              </div>
-              <div style={{ fontSize:'8px', color:'#334155', marginTop:'4px' }}>SAR limits applied automatically based on patient weight and RF pulse configuration.</div>
-            </div>
-
-            {/* Keyboard hint */}
-            <div style={{ marginTop:'10px', padding:'6px 8px', background:'rgba(34,211,238,0.04)', border:'1px solid rgba(34,211,238,0.1)', borderRadius:'2px', fontSize:'8px', color:'#334155' }}>
-              <kbd style={{ fontSize:'7.5px' }}>Tab</kbd> next field · <kbd style={{ fontSize:'7.5px' }}>Shift+Tab</kbd> previous · <kbd style={{ fontSize:'7.5px' }}>Ctrl+Enter</kbd> save · <kbd style={{ fontSize:'7.5px' }}>Esc</kbd> cancel
-            </div>
-          </div>
-        </div>
-
-        {/* ── Footer ─────────────────────────────────────────────────── */}
-        <div style={{ padding:'10px 16px', borderTop:'1px solid #1e293b', display:'flex', gap:'8px', alignItems:'center', flexShrink:0, background:'#08101c' }}>
-          <span style={{ fontSize:'8px', color:'#334155', fontStyle:'italic', flex:1 }}>
-            ⚕ All patient data is for educational simulation only — not stored or transmitted
-          </span>
-          <button onClick={() => { setForm(f => ({...f, lastName:'', firstName:'', patientId:'', dob:'', age:'', emergencyContact:''})); setSafeLocal({implant:false,pacemaker:false,pregnant:false,contrastAllergy:false,claustrophobia:false,previousMRI:false,emergencyContact:''}); }}
-            style={{ fontSize:'9px', background:'transparent', border:'1px solid #263040', color:'#475569', padding:'5px 12px', cursor:'pointer', borderRadius:'2px' }}>
-            Clear
-          </button>
-          <button onClick={togglePatient}
-            style={{ fontSize:'9px', background:'transparent', border:'1px solid #263040', color:'#64748b', padding:'5px 16px', cursor:'pointer', borderRadius:'2px' }}>
-            Cancel
-          </button>
-          <button onClick={handleSave} tabIndex={15}
-            style={{ fontSize:'10px', fontWeight:700, background:'rgba(34,211,238,0.15)', border:'1px solid rgba(34,211,238,0.4)', color:'#22d3ee', padding:'5px 24px', cursor:'pointer', borderRadius:'2px' }}>
-            Register Patient ▶
-          </button>
+        {/* Status Bar */}
+        <div style={{ borderTop: '1px solid #808080', background: '#c0c0c0', padding: '2px 4px', fontSize: '10px', color: '#808080', display: 'flex', justifyContent: 'space-between' }}>
+          <span>Patient Registration</span>
+          <span>ISO_IR 100</span>
         </div>
       </div>
     </div>
