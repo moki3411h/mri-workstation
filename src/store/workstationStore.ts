@@ -23,6 +23,7 @@ export interface ScanState {
 export interface ParamsState {
   slices:         number;
   thickness:      number;
+  spacing?:       number;
   tr:             number;
   te:             number;
   ti:             number;
