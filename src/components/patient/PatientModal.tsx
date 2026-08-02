@@ -246,7 +246,16 @@ export default function PatientModal() {
               <Field label="Referring Physician" value={form.referringMD} onChange={F('referringMD')} tabIndex={10} />
               <Field label="Procedure / Study" value={form.procedure} onChange={F('procedure')} tabIndex={11} />
               <SelectField label="Patient Position" value={form.position} onChange={F('position')} tabIndex={12}
-                options={['Head First — Supine','Head First — Prone','Feet First — Supine','Feet First — Prone']} />
+                options={[
+                  'Head First - Supine',
+                  'Feet First - Supine',
+                  'Head First - Prone',
+                  'Feet First - Prone',
+                  'Head First - Left Lateral',
+                  'Feet First - Left Lateral',
+                  'Head First - Right Lateral',
+                  'Feet First - Right Lateral'
+                ]} />
               <Field label="Additional Information" value={form.additionalInfo} onChange={F('additionalInfo')} placeholder="Optional notes…" tabIndex={13} />
               <Field label="Emergency Contact" value={form.emergencyContact} onChange={F('emergencyContact')} placeholder="Name & phone" tabIndex={14} />
             </div>

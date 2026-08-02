@@ -23,7 +23,7 @@ export interface ScanState {
 export interface ParamsState {
   slices:         number;
   thickness:      number;
-  spacing?:       number;
+  spacing:        number;
   tr:             number;
   te:             number;
   ti:             number;
@@ -173,7 +173,7 @@ const defaultXhair: XhairState = { x:0.5,  y:0.5  };
 const defaultWL: WLState       = { window:1200, level:600, brightness:1, contrast:1.15 };
 
 const defaultParams: ParamsState = {
-  slices:24, thickness:4, tr:2000, te:9, ti:0, flipAngle:150,
+  slices:24, thickness:4, spacing: 0, tr:2000, te:9, ti:0, flipAngle:150,
   bandwidth:145, etl:9, turboFactor:9, averages:1, concatenations:2,
   fovRead:220, fovPhase:100, matrix:320,
   phaseEncoding:'AP', fatSat:'None', parallelImaging:'GRAPPA ×2',
