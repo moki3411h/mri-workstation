@@ -147,11 +147,6 @@ export default function MRIViewport({ plane }: Props) {
       else if (lower.includes('sagittal')) targetPlane = 'sagittal';
     }
 
-    if (targetPlane === plane) {
-      if (currentState.activeTool === 'crosshair') store.setXhair(plane, pos);
-      return;
-    }
-    
     const f = currentState.fov[targetPlane];
     const h = hitHandle(pos.x, pos.y, f, c.width, c.height);
     
@@ -301,7 +296,6 @@ export default function MRIViewport({ plane }: Props) {
       
       updateOrthogonalViews(targetPlane, nf);
     } else {
-      // Hover cursors
       const currentState = useWorkstationStore.getState();
       const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
       let targetPlane = plane;
@@ -311,11 +305,11 @@ export default function MRIViewport({ plane }: Props) {
         else if (lower.includes('coronal')) targetPlane = 'coronal';
         else if (lower.includes('sagittal')) targetPlane = 'sagittal';
       }
-      if (targetPlane === plane) {
-        c.style.cursor = currentState.activeTool === 'pan' ? 'grab' : 'crosshair';
+      const h = hitHandle(pos.x, pos.y, currentState.fov[targetPlane], c.width, c.height);
+      if (h) {
+        c.style.cursor = CURSOR_MAP[h] || 'default';
       } else {
-        const h = hitHandle(pos.x, pos.y, currentState.fov[targetPlane], c.width, c.height);
-        c.style.cursor = h ? (CURSOR_MAP[h] || 'default') : 'crosshair';
+        c.style.cursor = currentState.activeTool === 'pan' ? 'grab' : 'crosshair';
       }
     }
   };
@@ -584,9 +578,9 @@ export default function MRIViewport({ plane }: Props) {
         ctx.strokeStyle = '#ffe040';
         ctx.lineWidth = 3;
         ctx.strokeRect(0, 0, W, H);
-      } else {
-        renderPlanningBox(ctx, W, H, fov[targetPlane]);
       }
+      // Draw FOV on all planes
+      renderPlanningBox(ctx, W, H, fov[targetPlane]);
     }
 
     if (show.sliceMarkers && sl.max > 1) {
@@ -651,7 +645,6 @@ export default function MRIViewport({ plane }: Props) {
           else if (lower.includes('coronal')) targetPlane = 'coronal';
           else if (lower.includes('sagittal')) targetPlane = 'sagittal';
         }
-        if (targetPlane === plane) return; // Can't nudge if it's the target viewing plane itself
         
         const step = e.shiftKey ? 10 : 1;
         let dx = 0, dy = 0;
