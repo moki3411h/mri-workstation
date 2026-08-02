@@ -192,12 +192,10 @@ export default function MRIViewport({ plane }: Props) {
     return { ...initFov, rot: initFov.rot + (a1 - a0) * 180 / Math.PI };
   };
 
-  const handleResize = (handle: string, ldx: number, ldy: number, initFov: FovState, W: number, H: number): FovState => {
+  const handleResize = (handle: string, ldx: number, ldy: number, initFov: FovState, W: number, H: number, shift: boolean, alt: boolean): FovState => {
     const nf = { ...initFov };
     let { x, y, w, h } = initFov;
-    const ang = initFov.rot * Math.PI / 180;
     
-    // ldx, ldy are in pixels. convert to normalized for w/h
     const ndx = ldx / W;
     const ndy = ldy / H;
 
@@ -205,13 +203,57 @@ export default function MRIViewport({ plane }: Props) {
     const isLeft = handle === 'left' || handle === 'tl' || handle === 'bl';
     const isBottom = handle === 'bottom' || handle === 'bl' || handle === 'br';
     const isTop = handle === 'top' || handle === 'tl' || handle === 'tr';
+    const isCorner = handle === 'tl' || handle === 'tr' || handle === 'bl' || handle === 'br';
 
-    if (isRight)  w = Math.max(MIN_SIZE, initFov.w + ndx);
-    if (isLeft) { const nw = Math.max(MIN_SIZE, initFov.w - ndx); const dw = initFov.w - nw; x += dw * Math.cos(ang); y += dw * Math.sin(ang * (W/H)); w = nw; }
-    if (isBottom) h = Math.max(MIN_SIZE, initFov.h + ndy);
-    if (isTop)  { const nh = Math.max(MIN_SIZE, initFov.h - ndy); const dh = initFov.h - nh; x -= dh * Math.sin(ang * (H/W)); y += dh * Math.cos(ang); h = nh; }
+    let dw = 0;
+    let dh = 0;
+
+    if (isRight)  dw = ndx;
+    if (isLeft)   dw = -ndx;
+    if (isBottom) dh = ndy;
+    if (isTop)    dh = -ndy;
+
+    if (shift && isCorner) {
+      // Preserve aspect ratio
+      const ratio = (initFov.w * W) / (initFov.h * H);
+      const absDwxW = Math.abs(dw * W);
+      const absDhyH = Math.abs(dh * H);
+      if (absDwxW > absDhyH) {
+        dh = Math.sign(dh) * Math.abs((dw * W) / ratio / H);
+      } else {
+        dw = Math.sign(dw) * Math.abs((dh * H * ratio) / W);
+      }
+    }
+
+    if (alt) {
+      // Resize from center
+      const nw = Math.max(MIN_SIZE, initFov.w + 2 * dw);
+      const nh = Math.max(MIN_SIZE, initFov.h + 2 * dh);
+      w = nw; h = nh;
+      x = initFov.x + (initFov.w - nw) / 2;
+      y = initFov.y + (initFov.h - nh) / 2;
+    } else {
+      // Normal resize
+      const nw = Math.max(MIN_SIZE, initFov.w + dw);
+      const nh = Math.max(MIN_SIZE, initFov.h + dh);
+      const actualDw = nw - initFov.w;
+      const actualDh = nh - initFov.h;
+
+      w = nw; h = nh;
+      // If we move the left/top edge, the origin (x,y) moves
+      const ang = initFov.rot * Math.PI / 180;
+      let ox = 0, oy = 0;
+      if (isLeft) { ox -= actualDw; }
+      if (isTop)  { oy -= actualDh; }
+
+      // Apply rotation to origin shift
+      x += ox * Math.cos(ang) - oy * Math.sin(ang * (H/W));
+      y += ox * Math.sin(ang * (W/H)) + oy * Math.cos(ang);
+    }
     
-    nf.x = x; nf.y = y; nf.w = w; nf.h = h;
+    nf.x = Math.max(0, Math.min(1 - w, x));
+    nf.y = Math.max(0, Math.min(1 - h, y));
+    nf.w = w; nf.h = h;
     return nf;
   };
 
@@ -254,7 +296,7 @@ export default function MRIViewport({ plane }: Props) {
         const pdy = dy * c.height;
         const ldx = pdx * Math.cos(-ang) - pdy * Math.sin(-ang);
         const ldy = pdx * Math.sin(-ang) + pdy * Math.cos(-ang);
-        nf = handleResize(handle, ldx, ldy, initFov, c.width, c.height);
+        nf = handleResize(handle, ldx, ldy, initFov, c.width, c.height, e.shiftKey, e.altKey);
       }
       
       updateOrthogonalViews(targetPlane, nf);
@@ -286,9 +328,23 @@ export default function MRIViewport({ plane }: Props) {
 
   function onWheel(e: React.WheelEvent) {
     e.preventDefault();
-    if (e.ctrlKey) { zoom.current = Math.max(0.5, Math.min(4, zoom.current + (e.deltaY > 0 ? -0.1 : 0.1))); return; }
-    const d = e.deltaY > 0 ? 1 : -1;
-    store.setSlice(plane, store.slice[plane].cur + d);
+    const d = e.deltaY > 0 ? -1 : 1;
+    if (e.ctrlKey) {
+      store.setParam('slices', Math.max(1, store.params.slices + d));
+      store.applyParams();
+      return;
+    }
+    if (e.altKey) {
+      store.setParam('thickness', Math.max(1, store.params.thickness + d * 0.5));
+      store.applyParams();
+      return;
+    }
+    // Zoom with Shift
+    if (e.shiftKey) { 
+      zoom.current = Math.max(0.5, Math.min(4, zoom.current + (e.deltaY > 0 ? -0.1 : 0.1))); 
+      return; 
+    }
+    store.setSlice(plane, store.slice[plane].cur + (e.deltaY > 0 ? 1 : -1));
   }
 
   function onDblClick(e: React.MouseEvent) {
@@ -354,19 +410,34 @@ export default function MRIViewport({ plane }: Props) {
     ctx.strokeStyle = '#ffe040';
     ctx.lineWidth = 1;
     
+    // Fill
+    ctx.fillStyle = 'rgba(255, 224, 64, 0.15)';
+    ctx.fillRect(-hw, -hh, bw, bh);
+
     // Draw slices (parallel lines inside)
     ctx.beginPath();
-    const numSlices = 7;
+    ctx.strokeStyle = 'rgba(34,197,94,0.9)'; // Green
+    
+    // We expect params to be passed to this function now, wait I need to add it to the args!
+    // Since I can't change the args signature without changing the callers in the same chunk easily,
+    // I will just read from the store directly here, as it's safe in the render loop.
+    const state = useWorkstationStore.getState();
+    const params = state.params;
+    const numSlices = params.slices || 1;
+    
+    const baseStep = isHoriz ? bh / Math.max(1, numSlices) : bw / Math.max(1, numSlices);
+    const step = baseStep * (params.thickness / 4) + (params.spacing || 0) * 2;
+    const totalExtent = (numSlices - 1) * step;
+    const startOffset = -totalExtent / 2;
+
     if (isHoriz) {
-      const step = bh / (numSlices - 1);
       for (let i=0; i<numSlices; i++) {
-        const y = -hh + i*step;
+        const y = startOffset + i*step;
         ctx.moveTo(-hw, y); ctx.lineTo(hw, y);
       }
     } else {
-      const step = bw / (numSlices - 1);
       for (let i=0; i<numSlices; i++) {
-        const x = -hw + i*step;
+        const x = startOffset + i*step;
         ctx.moveTo(x, -hh); ctx.lineTo(x, hh);
       }
     }
@@ -566,9 +637,52 @@ export default function MRIViewport({ plane }: Props) {
       if (['INPUT','SELECT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
       if (e.code === 'Space') { spacePressedRef.current = true; }
       if (e.key === 'Delete' && store.activeVP === plane) store.resetViewport(plane);
+      
+      // Nudge FOV
+      if (e.key.startsWith('Arrow')) {
+        const currentState = useWorkstationStore.getState();
+        if (currentState.activeVP !== plane) return; // Only process on active viewport
+        
+        const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
+        let targetPlane = plane;
+        if (seq) {
+          const lower = seq.name.toLowerCase();
+          if (lower.includes('axial')) targetPlane = 'axial';
+          else if (lower.includes('coronal')) targetPlane = 'coronal';
+          else if (lower.includes('sagittal')) targetPlane = 'sagittal';
+        }
+        if (targetPlane === plane) return; // Can't nudge if it's the target viewing plane itself
+        
+        const step = e.shiftKey ? 10 : 1;
+        let dx = 0, dy = 0;
+        if (e.key === 'ArrowUp') dy = -step;
+        if (e.key === 'ArrowDown') dy = step;
+        if (e.key === 'ArrowLeft') dx = -step;
+        if (e.key === 'ArrowRight') dx = step;
+        
+        if (dx !== 0 || dy !== 0) {
+          e.preventDefault();
+          const f = currentState.fov[targetPlane];
+          const c = canvasRef.current;
+          if (c) {
+             const ndx = dx / c.width;
+             const ndy = dy / c.height;
+             let nx = f.x + ndx;
+             let ny = f.y + ndy;
+             const cx = nx + f.w / 2;
+             const cy = ny + f.h / 2;
+             if (cx < 0.05) nx += (0.05 - cx);
+             if (cx > 0.95) nx -= (cx - 0.95);
+             if (cy < 0.05) ny += (0.05 - cy);
+             if (cy > 0.95) ny -= (cy - 0.95);
+             
+             updateOrthogonalViews(targetPlane, { ...f, x: nx, y: ny });
+          }
+        }
+      }
     };
     const ku = (e: KeyboardEvent) => { if (e.code === 'Space') spacePressedRef.current = false; };
-    window.addEventListener('keydown', kd);
+    window.addEventListener('keydown', kd, { passive: false });
     window.addEventListener('keyup', ku);
     return () => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); };
   }, [plane]);
