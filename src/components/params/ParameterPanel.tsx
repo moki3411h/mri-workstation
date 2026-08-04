@@ -313,18 +313,20 @@ export default function ParameterPanel() {
       <div style={{ flex:1, overflowY:'auto' }}>
         {/* ── Tab 0: Routine (slice geometry + timing) ── */}
         {tab === 0 && (<>
-          <GROUP title="SLICE GEOMETRY" />
+          <GROUP title="GEOMETRY" />
+          {PSL('FoV read',       'fovRead',     100, 500, ' mm', 1)}
+          {PSL('FoV phase',      'fovPhase',    100, 500, ' mm', 1)}
           {PSL('Slice Count',    'sliceCount',     1, 200,  ' sl', 1)}
           {PSL('Thickness',      'sliceThickness', 0.5, 20, ' mm', 0.5)}
           {PSL('Slice Gap',      'sliceGap',       -5, 20,  ' mm', 0.1)}
+          {PSEL('Phase enc. dir','phaseDir' as any, ['A>>P','P>>A','R>>L','L>>R','H>>F','F>>H'])}
+          {P('Matrix',           'matrix',           '',      'number', 64, 1024)}
+          {PSEL('Orientation',   'orientation',   ['axial','coronal','sagittal'])}
           <GROUP title="TIMING" />
           {P('TR',               'tr',             'ms', 'number', 20, 15000)}
           {P('TE',               'te',             'ms', 'number', 1, 500)}
           {P('Averages',         'averages',       '',   'number', 1, 16)}
           {P('Concatenations',   'concatenations', '',   'number', 1, 4)}
-          <GROUP title="ENCODING" />
-          {SEL('Phase Enc',      'phaseEncoding' as any, ['AP','PA','RL','LR','HF','FH'])}
-          {SEL('Filter',         'filter',         ['Prescan Normalize','None','Elliptical','Raw'])}
         </>)}
 
         {/* ── Tab 1: Contrast (RF params) ── */}

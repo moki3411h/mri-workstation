@@ -4,7 +4,7 @@ import { useWorkstationStore, type PlanningObject } from '@/store/workstationSto
 import {
   type Plane,
   project3Dto2D, unproject2Dto3D,
-  getFovHandles2D, hitTestFov, projectSliceLines,
+  getFovHandles2D, hitTestFov, projectSlicePolygons,
   getPlanningTargetPlane, CURSOR_MAP,
   VIEW_FOV_MM,
 } from '@/lib/geometry';
@@ -403,16 +403,35 @@ export default function MRIViewport({ plane }: Props) {
       // ── Active planning viewport: full FOV rectangle + handles ──
       const handles = getFovHandles2D(plan, plane, W, H);
 
-      // Outline (No fill)
+      // Outline and Semi-transparent fill
       ctx.beginPath();
       ctx.moveTo(handles.tl.x, handles.tl.y);
       ctx.lineTo(handles.tr.x, handles.tr.y);
       ctx.lineTo(handles.br.x, handles.br.y);
       ctx.lineTo(handles.bl.x, handles.bl.y);
       ctx.closePath();
+      
+      // Semi-transparent fill
+      ctx.fillStyle = 'rgba(255, 224, 64, 0.1)';
+      ctx.fill();
+
+      // Outline
       ctx.strokeStyle = '#ffff00';
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
+      ctx.stroke();
+
+      // Rotation handle: dashed line + circle
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(handles.top.x, handles.top.y);
+      ctx.lineTo(handles.rot.x, handles.rot.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(handles.rot.x, handles.rot.y, 4, 0, Math.PI * 2);
       ctx.stroke();
 
       // Crosshair at center
@@ -473,23 +492,46 @@ export default function MRIViewport({ plane }: Props) {
       }
 
     } else {
-      // ── Projected viewport: slice lines only, no rectangle ──
-      const lines = projectSliceLines(plan, plane, W, H);
+      // ── Projected viewport: true slice thickness via polygons ──
+      const polygons = projectSlicePolygons(plan, plane, W, H);
       
-      for (const line of lines) {
+      for (const poly of polygons) {
+        ctx.beginPath();
+        ctx.moveTo(poly.corners[0].x, poly.corners[0].y);
+        ctx.lineTo(poly.corners[1].x, poly.corners[1].y);
+        ctx.lineTo(poly.corners[2].x, poly.corners[2].y);
+        ctx.lineTo(poly.corners[3].x, poly.corners[3].y);
+        ctx.closePath();
+
+        // Stroke
         ctx.strokeStyle = '#ffff00'; // All slice lines are yellow in Siemens reference
         ctx.lineWidth = 1;
-        
-        if (line.style === 'dashed') {
+        if (poly.isCenter) {
           ctx.setLineDash([5, 5]);
         } else {
           ctx.setLineDash([]);
         }
-
-        ctx.beginPath();
-        ctx.moveTo(line.p1.x, line.p1.y);
-        ctx.lineTo(line.p2.x, line.p2.y);
         ctx.stroke();
+
+        // Fill with slight green tint for slice volume representation
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.05)';
+        ctx.fill();
+        
+        // Draw the center cross on the middle slice
+        if (poly.isCenter) {
+          const cx = (poly.corners[0].x + poly.corners[1].x + poly.corners[2].x + poly.corners[3].x) / 4;
+          const cy = (poly.corners[0].y + poly.corners[1].y + poly.corners[2].y + poly.corners[3].y) / 4;
+          const cSize = 4;
+          ctx.beginPath();
+          ctx.moveTo(cx - cSize, cy); ctx.lineTo(cx + cSize, cy);
+          ctx.moveTo(cx, cy - cSize); ctx.lineTo(cx, cy + cSize);
+          ctx.stroke();
+          
+          // Draw the small diamond/circle marker in the center
+          ctx.beginPath();
+          ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
       ctx.setLineDash([]); // Reset
     }

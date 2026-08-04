@@ -241,30 +241,21 @@ export function hitTestFov(px: number, py: number, handles: Handles2D): string |
   return null;
 }
 
-// ── Slice Line Projection ──────────────────────────────────────────────────
-
-export interface SliceLine {
-  p1: Point2D;
-  p2: Point2D;
-  style: 'solid' | 'dashed' | 'bound';
+export interface SlicePolygon {
+  corners: [Point2D, Point2D, Point2D, Point2D];
+  isCenter: boolean;
 }
 
 /**
- * Project all slice planes as visible lines onto a given viewport.
- * 
- * For each slice, we draw a line that represents where that slice plane
- * intersects the current viewport's view plane.
- * 
- * This works by finding the line of intersection between each slice plane
- * and the viewport's projection plane.
+ * Project all slice planes as 2D polygons representing true slice thickness.
  */
-export function projectSliceLines(plan: PlanningObject, plane: Plane, W: number, H: number): SliceLine[] {
+export function projectSlicePolygons(plan: PlanningObject, plane: Plane, W: number, H: number): SlicePolygon[] {
   const sliceCenters = getSliceCenters3D(plan);
   if (sliceCenters.length === 0) return [];
 
   const fovWidth = plan.fovRead;
   const hw = fovWidth / 2;
-  const overextendHw = hw * 1.1; // Siemens slice lines extend slightly past the bounds
+  const ht = plan.sliceThickness / 2; // half thickness
 
   let readDir: Point3D;
   if (plan.orientation === 'axial') {
@@ -275,67 +266,48 @@ export function projectSliceLines(plan: PlanningObject, plane: Plane, W: number,
     readDir = { x: 0, y: 1, z: 0 };
   }
   const rotatedReadDir = applyPlanningRotation(readDir, plan);
+  const normal = getSliceNormal(plan);
 
-  const getSliceEdgePoints = (sc: Point3D, halfWidth: number) => {
-    return {
-      p1: {
-        x: sc.x - rotatedReadDir.x * halfWidth,
-        y: sc.y - rotatedReadDir.y * halfWidth,
-        z: sc.z - rotatedReadDir.z * halfWidth,
-      },
-      p2: {
-        x: sc.x + rotatedReadDir.x * halfWidth,
-        y: sc.y + rotatedReadDir.y * halfWidth,
-        z: sc.z + rotatedReadDir.z * halfWidth,
-      }
-    };
-  };
+  const polygons: SlicePolygon[] = [];
+  const centerIdx = Math.floor(sliceCenters.length / 2);
 
-  const lines: SliceLine[] = [];
-
-  // 1. First slice (Top bound)
-  const firstCenters = getSliceEdgePoints(sliceCenters[0]!, overextendHw);
-  lines.push({
-    p1: project3Dto2D(firstCenters.p1, plane, W, H),
-    p2: project3Dto2D(firstCenters.p2, plane, W, H),
-    style: 'solid'
-  });
-
-  // 2. Last slice (Bottom bound)
-  if (sliceCenters.length > 1) {
-    const lastCenters = getSliceEdgePoints(sliceCenters[sliceCenters.length - 1]!, overextendHw);
-    lines.push({
-      p1: project3Dto2D(lastCenters.p1, plane, W, H),
-      p2: project3Dto2D(lastCenters.p2, plane, W, H),
-      style: 'solid'
-    });
-
-    // 3. Center slice (Dashed)
-    const midIdx = Math.floor(sliceCenters.length / 2);
-    const midCenters = getSliceEdgePoints(sliceCenters[midIdx]!, overextendHw);
-    lines.push({
-      p1: project3Dto2D(midCenters.p1, plane, W, H),
-      p2: project3Dto2D(midCenters.p2, plane, W, H),
-      style: 'dashed'
-    });
-
-    // 4. Vertical FoV bounds (connecting first and last slice at exactly 'hw' distance)
-    const boundFirst = getSliceEdgePoints(sliceCenters[0]!, hw);
-    const boundLast = getSliceEdgePoints(sliceCenters[sliceCenters.length - 1]!, hw);
+  for (let i = 0; i < sliceCenters.length; i++) {
+    const sc = sliceCenters[i]!;
     
-    lines.push({
-      p1: project3Dto2D(boundFirst.p1, plane, W, H),
-      p2: project3Dto2D(boundLast.p1, plane, W, H),
-      style: 'bound'
-    });
-    lines.push({
-      p1: project3Dto2D(boundFirst.p2, plane, W, H),
-      p2: project3Dto2D(boundLast.p2, plane, W, H),
-      style: 'bound'
+    // The 4 corners of the slice cross-section in 3D:
+    const c1: Point3D = {
+      x: sc.x - rotatedReadDir.x * hw - normal.x * ht,
+      y: sc.y - rotatedReadDir.y * hw - normal.y * ht,
+      z: sc.z - rotatedReadDir.z * hw - normal.z * ht,
+    };
+    const c2: Point3D = {
+      x: sc.x + rotatedReadDir.x * hw - normal.x * ht,
+      y: sc.y + rotatedReadDir.y * hw - normal.y * ht,
+      z: sc.z + rotatedReadDir.z * hw - normal.z * ht,
+    };
+    const c3: Point3D = {
+      x: sc.x + rotatedReadDir.x * hw + normal.x * ht,
+      y: sc.y + rotatedReadDir.y * hw + normal.y * ht,
+      z: sc.z + rotatedReadDir.z * hw + normal.z * ht,
+    };
+    const c4: Point3D = {
+      x: sc.x - rotatedReadDir.x * hw + normal.x * ht,
+      y: sc.y - rotatedReadDir.y * hw + normal.y * ht,
+      z: sc.z - rotatedReadDir.z * hw + normal.z * ht,
+    };
+
+    polygons.push({
+      corners: [
+        project3Dto2D(c1, plane, W, H),
+        project3Dto2D(c2, plane, W, H),
+        project3Dto2D(c3, plane, W, H),
+        project3Dto2D(c4, plane, W, H),
+      ],
+      isCenter: i === centerIdx,
     });
   }
 
-  return lines;
+  return polygons;
 }
 
 // ── Cursor Mapping ─────────────────────────────────────────────────────────
