@@ -17,7 +17,11 @@ export default function PhysicsPanel() {
   const snr = calcSNR({ tr:p.tr, te:p.te, sliceThickness:p.thickness, nex:p.averages, fov:p.fov, matrix:p.matrix });
   const contrast = getContrastType(p.tr, p.te);
   const res = calcResolution(p.fov, p.matrix, p.thickness);
-  const taSec = calcTA2({ slices:24, tr:p.tr, te:p.te, averages:p.averages, concatenations:2, turboFactor:9, matrix:p.matrix });
+  const taSec = calcTA2({ 
+    slices:24, tr:p.tr, te:p.te, averages:p.averages, concatenations:2, 
+    turboFactor:9, matrix:p.matrix, fovPhase:100, partialFourier:'Off', 
+    parallelImaging:'None', phaseEncoding:'AP' 
+  });
   const artifacts = getArtifactWarnings({ fov:p.fov, matrix:p.matrix, tr:p.tr, te:p.te, bandwidth:p.bandwidth, phaseEncoding:'AP', sliceThickness:p.thickness });
   const explanation = getExplanation(lastChanged);
   const snrLbl = snrLabel(snr);

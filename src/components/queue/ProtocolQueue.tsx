@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { useWorkstationStore } from '@/store/workstationStore';
 import type { Sequence } from '@/lib/scanEngine';
-import { formatTime, totalProtocolTime } from '@/lib/scanEngine';
+import { formatTime } from '@/lib/scanEngine';
 import { toast } from '@/lib/toast';
 
 const STATUS_CONFIG = {
@@ -211,6 +211,16 @@ export default function ProtocolQueue() {
         duplicateSeq(selectedSeqId);
         toast('Sequence duplicated', 'success');
       }
+      if (e.key === 'D' && e.shiftKey) {
+        e.preventDefault();
+        useWorkstationStore.getState().toggleDebug();
+      }
+      if (e.key === ' ') {
+        e.preventDefault();
+        const state = useWorkstationStore.getState();
+        if (state.scan.running && !state.scan.paused) state.pauseScan();
+        else state.startScan();
+      }
       if (e.key === 'ArrowUp') {
         const i = sequences.findIndex(s => s.id === selectedSeqId);
         if (i > 0) selectSeq(sequences[i-1]!.id);
@@ -251,7 +261,10 @@ export default function ProtocolQueue() {
     setCtxMenu({ x: e.clientX, y: e.clientY, seqId });
   }, [selectSeq]);
 
-  const totalSec = totalProtocolTime();
+  const totalSec = sequences.reduce((acc, s) => {
+    const [m, sec] = s.ta.split(':').map(Number);
+    return acc + (m ?? 0) * 60 + (sec ?? 0);
+  }, 0);
   const doneCount = sequences.filter(s => s.status === 'done').length;
 
   return (
@@ -288,7 +301,6 @@ export default function ProtocolQueue() {
 
         {/* Queue management buttons */}
         {[
-          { label:'✓ Apply', title:'Apply params to selected',  fn: () => { applyParams(); toast('Parameters applied ✓','success'); } },
           { label:'⧉ Copy',  title:'Duplicate (Ctrl+D)',         fn: () => { if (selectedSeqId) { duplicateSeq(selectedSeqId); toast('Duplicated','success'); } } },
           { label:'▲',       title:'Move up',                    fn: () => { if (selectedSeqId) moveSeq(selectedSeqId, 'up'); } },
           { label:'▼',       title:'Move down',                  fn: () => { if (selectedSeqId) moveSeq(selectedSeqId, 'down'); } },

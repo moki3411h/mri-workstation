@@ -4,7 +4,6 @@ import dynamic from 'next/dynamic';
 import { useEffect } from 'react';
 import { useWorkstationStore } from '@/store/workstationStore';
 import StatusBar from '@/components/layout/StatusBar';
-import { preloadDefaultImages } from '@/lib/imageLoader';
 
 // Dynamic imports to avoid SSR issues with Canvas/Three.js
 const TopBar        = dynamic(() => import('@/components/layout/TopBar'),        { ssr: false });
@@ -25,68 +24,58 @@ export default function WorkstationPage() {
   const {
     leftCollapsed, rightCollapsed,
     showHelp, showPatient, showPhysics, showLearning, showAI,
-    setImage, setStatusMsg, setSlice, showImageImport,
+    showImageImport, theme,
   } = useWorkstationStore();
 
-  // ── Cine Loop Simulation ───────────────────────────────────────────────────
+  // ── Apply theme class to document root ─────────────────────────────────────
   useEffect(() => {
-    const unsub = useWorkstationStore.subscribe((state, prevState) => {
-      if (state.cineMode && !prevState.cineMode) {
-        // Start cine loop interval on the active viewport
-        const interval = setInterval(() => {
-          const s = useWorkstationStore.getState();
-          if (!s.cineMode) { clearInterval(interval); return; }
-          const plane = s.activeVP;
-          const { cur, max } = s.slice[plane];
-          let next = cur + 1;
-          if (next > max) next = 1;
-          s.setSlice(plane, next);
-        }, 100);
-        return () => clearInterval(interval);
-      }
-    });
-    return unsub;
-  }, []);
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   // ── Global keyboard shortcuts ──────────────────────────────────────────────
   useEffect(() => {
-    const { togglePatient, togglePhysics, toggleLearning, toggleAI, toggleHelp } = useWorkstationStore.getState();
-
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
-      if (['INPUT','SELECT','TEXTAREA'].includes(tag)) return;
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return;
+      const state = useWorkstationStore.getState();
 
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); togglePatient(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); state.togglePatient(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); document.getElementById('global-file-input')?.click(); }
-      if (e.key === 'h' || e.key === 'H') toggleHelp();
-      if (e.key === 'p' || e.key === 'P') togglePhysics();
-      if (e.key === 'l' || e.key === 'L') toggleLearning();
+      if (e.key === 'h' || e.key === 'H') state.toggleHelp();
+      if (e.key === 'p' || e.key === 'P') state.togglePhysics();
+      if (e.key === 'l' || e.key === 'L') state.toggleLearning();
+      if (e.key === 't' || e.key === 'T') state.toggleTheme();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const isDark = theme !== 'light';
+  const bg = isDark ? '#04060a' : '#e8ecf5';
+  const border = isDark ? '#1e293b' : '#c5d0e0';
+  const queueBg = isDark ? '#111827' : '#dde4ef';
+
   return (
     <>
     <SplashScreen />
-    <div id="workstation" style={{
+    <div id="workstation" data-theme={theme} style={{
       display: 'grid',
       gridTemplateRows: '36px 1fr 260px 20px',
       gridTemplateColumns: leftCollapsed ? '0px 1fr 212px' : '220px 1fr 212px',
       height: '100vh',
       width: '100vw',
       overflow: 'hidden',
-      background: '#04060a',
+      background: bg,
       transition: 'grid-template-columns 0.2s ease',
     }}>
       {/* Top bar — full width */}
-      <div id="topbar" style={{ gridColumn: '1 / -1', gridRow: '1', borderBottom: '1px solid #1e293b', zIndex: 50 }}>
+      <div id="topbar" style={{ gridColumn: '1 / -1', gridRow: '1', borderBottom: `1px solid ${border}`, zIndex: 50 }}>
         <TopBar />
       </div>
 
       {/* Left sidebar */}
       {!leftCollapsed && (
-        <div id="leftsb" style={{ gridColumn: '1', gridRow: '2', borderRight: '1px solid #1e293b', overflow: 'hidden' }}>
+        <div id="leftsb" style={{ gridColumn: '1', gridRow: '2', borderRight: `1px solid ${border}`, overflow: 'hidden' }}>
           <LeftSidebar />
         </div>
       )}
@@ -103,7 +92,7 @@ export default function WorkstationPage() {
 
       {/* Right sidebar */}
       {!rightCollapsed && (
-        <div id="rightsb" style={{ gridColumn: '3', gridRow: '2', borderLeft: '1px solid #1e293b', overflow: 'hidden' }}>
+        <div id="rightsb" style={{ gridColumn: '3', gridRow: '2', borderLeft: `1px solid ${border}`, overflow: 'hidden' }}>
           <RightSidebar />
         </div>
       )}
@@ -112,18 +101,18 @@ export default function WorkstationPage() {
       <div id="queue" style={{
         gridColumn: '1 / -1',
         gridRow: '3',
-        borderTop: '2px solid #1e293b',
+        borderTop: `2px solid ${border}`,
         display: 'flex',
-        background: '#111827',
+        background: queueBg,
         overflow: 'hidden',
       }}>
         <ProtocolQueue />
-        <div style={{ width: '1px', background: '#1e293b', flexShrink: 0 }} />
+        <div style={{ width: '1px', background: border, flexShrink: 0 }} />
         <ParameterPanel />
       </div>
 
       {/* Status bar */}
-      <div id="statusbar" style={{ gridColumn: '1 / -1', gridRow: '4', borderTop: '1px solid #1e293b', zIndex: 40 }}>
+      <div id="statusbar" style={{ gridColumn: '1 / -1', gridRow: '4', borderTop: `1px solid ${border}`, zIndex: 40 }}>
         <StatusBar />
       </div>
 
@@ -139,21 +128,35 @@ export default function WorkstationPage() {
       <input
         id="global-file-input"
         type="file"
-        accept=".jpg,.jpeg,.png,.bmp,.tif,.tiff,.webp,.mp4,video/mp4,.pdf,application/pdf"
+        accept=".jpg,.jpeg,.png,.bmp,.tif,.tiff,.webp,.mp4,video/mp4"
         multiple
         style={{ display: 'none' }}
-        onChange={e => {
+        onChange={async e => {
           const files = Array.from(e.target.files ?? []);
-          const { setImage, setStatusMsg } = useWorkstationStore.getState();
-          const planes: ('axial' | 'coronal' | 'sagittal')[] = ['axial', 'coronal', 'sagittal'];
-          files.slice(0, 3).forEach((file, i) => {
+          if (files.length === 0) return;
+          const store = useWorkstationStore.getState();
+
+          // Single file → load into all 3 viewports
+          if (files.length === 1) {
+            const file = files[0]!;
             const reader = new FileReader();
             reader.onload = ev => {
-              setImage(planes[i]!, ev.target?.result as string);
-              setStatusMsg(`Loaded: ${file.name}`);
+              store.setImageAll(ev.target?.result as string);
+              store.setStatusMsg(`Loaded: ${file.name}`);
             };
             reader.readAsDataURL(file);
-          });
+          } else {
+            // Multiple files → assign to planes
+            const planes: ('axial' | 'coronal' | 'sagittal')[] = ['axial', 'coronal', 'sagittal'];
+            files.slice(0, 3).forEach((file, i) => {
+              const reader = new FileReader();
+              reader.onload = ev => {
+                store.setImage(planes[i]!, ev.target?.result as string);
+                store.setStatusMsg(`Loaded: ${file.name}`);
+              };
+              reader.readAsDataURL(file);
+            });
+          }
           e.target.value = '';
         }}
       />

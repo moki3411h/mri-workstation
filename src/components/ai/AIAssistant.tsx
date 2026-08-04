@@ -34,7 +34,7 @@ function getSuggestion(input: string): string {
 }
 
 export default function AIAssistant() {
-  const { toggleAI, params, calcTA, calcSNR, setStatusMsg, sequences, selectedSeqId } = useWorkstationStore();
+  const { toggleAI, params, planning, calcTA, calcSNR, setStatusMsg, sequences, selectedSeqId } = useWorkstationStore();
   const [input, setInput] = useState('');
   const [suggestion, setSuggestion] = useState('');
   const selectedSeq = sequences.find(s => s.id === selectedSeqId);
@@ -43,7 +43,7 @@ export default function AIAssistant() {
   if ((selectedSeq?.sarPct ?? 0) > 85) paramHints.push('⚠ High SAR — consider reducing flip angle or TR to protect patient.');
   if (calcTA > '04:00') paramHints.push('⏱ Long scan time — enable GRAPPA ×2 in Resolution tab to speed up.');
   if (params.te > 100) paramHints.push('📡 Very long TE — significant signal loss expected. Consider reducing TE for SNR.');
-  if (params.slices > 50 && params.concatenations < 2) paramHints.push('📐 Many slices — increase Concatenations to avoid geometry issues.');
+  if (planning.sliceCount > 50 && params.concatenations < 2) paramHints.push('📐 Many slices — increase Concatenations to avoid geometry issues.');
   if (params.averages >= 3) paramHints.push('🔁 High averages — scan time increases linearly. Consider reducing if tolerable.');
   if (calcSNR < 20) paramHints.push('📉 Low SNR estimate — increase FOV, thickness, or averages for acceptable image quality.');
 

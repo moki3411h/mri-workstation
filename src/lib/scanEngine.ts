@@ -24,11 +24,49 @@ export interface TAParams {
   concatenations:number;
   turboFactor:  number;
   matrix:       number;
+  fovPhase:     number; // percentage
+  partialFourier: string; // e.g., 'Off', '7/8', '6/8', '5/8', 'Half'
+  parallelImaging:string; // e.g., 'Off', 'GRAPPA ×2', 'GRAPPA ×3'
+  phaseEncoding:  string; // 'AP', 'RL', 'HF'
 }
 
 export function calculateTA(p: TAParams): number {
-  const phaseLines = Math.ceil(p.matrix / p.turboFactor);
-  return Math.ceil((p.tr / 1000) * phaseLines * p.averages * p.concatenations);
+  // Phase matrix based on FOV Phase %
+  let phaseMatrix = p.matrix * (p.fovPhase / 100);
+
+  // Partial Fourier
+  let pfFactor = 1.0;
+  if (p.partialFourier === '7/8') pfFactor = 7/8;
+  if (p.partialFourier === '6/8') pfFactor = 6/8;
+  if (p.partialFourier === '5/8') pfFactor = 5/8;
+  if (p.partialFourier === 'Half') pfFactor = 0.5;
+
+  phaseMatrix *= pfFactor;
+
+  // Parallel Imaging (Acceleration Factor)
+  let accel = 1.0;
+  if (p.parallelImaging.includes('×2')) accel = 2.0;
+  if (p.parallelImaging.includes('×3')) accel = 3.0;
+  if (p.parallelImaging.includes('×4')) accel = 4.0;
+
+  phaseMatrix /= accel;
+
+  // Simulated concatenations limit
+  // A typical TR can only hold a certain number of slices depending on TE
+  // E.g., Max Slices = TR / (TE + overhead)
+  const overhead = 15; // ms
+  const maxSlicesPerTR = Math.max(1, Math.floor(p.tr / (p.te + overhead)));
+  const simConcatenations = Math.ceil(p.slices / maxSlicesPerTR);
+
+  // Use the larger of user-defined concatenations or simulated limit
+  const finalConcat = Math.max(p.concatenations || 1, simConcatenations);
+
+  const phaseLines = Math.ceil(phaseMatrix / Math.max(1, p.turboFactor));
+  
+  // TA in seconds
+  const taSeconds = (p.tr / 1000) * phaseLines * p.averages * finalConcat;
+  
+  return Math.ceil(taSeconds);
 }
 
 export function formatTime(sec: number): string {
@@ -41,12 +79,7 @@ export function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
-export function totalProtocolTime(): number {
-  return SEQUENCES.reduce((acc, s) => {
-    const [m, sec] = s.ta.split(':').map(Number);
-    return acc + (m ?? 0) * 60 + (sec ?? 0);
-  }, 0);
-}
+
 
 export const SEQUENCES: Sequence[] = [
   {

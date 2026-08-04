@@ -12,14 +12,15 @@ export interface ExamSnapshot {
   safety:    WorkstationStore['safety'];
   sequences: WorkstationStore['sequences'];
   params:    WorkstationStore['params'];
-  fov:       WorkstationStore['fov'];
-  slice:     WorkstationStore['slice'];
+  planning:  WorkstationStore['planning'];
   wl:        WorkstationStore['wl'];
   show:      WorkstationStore['show'];
+  /** @deprecated kept for backwards compat */
+  slice?:    WorkstationStore['wl'];
 }
 
 export function exportExam(store: Pick<WorkstationStore,
-  'patient'|'safety'|'sequences'|'params'|'fov'|'slice'|'wl'|'show'
+  'patient'|'safety'|'sequences'|'params'|'planning'|'wl'|'show'
 >): ExamSnapshot {
   return {
     version:  '1.0',
@@ -28,8 +29,7 @@ export function exportExam(store: Pick<WorkstationStore,
     safety:   store.safety,
     sequences: store.sequences,
     params:   store.params,
-    fov:      store.fov,
-    slice:    store.slice,
+    planning: store.planning,
     wl:       store.wl,
     show:     store.show,
   };
@@ -59,8 +59,14 @@ export function readJSONFile(file: File): Promise<unknown> {
 
 export function validateSnapshot(data: unknown): data is ExamSnapshot {
   if (typeof data !== 'object' || data === null) return false;
-  const snap = data as Record<string, unknown>;
-  return snap['version'] === '1.0' && typeof snap['patient'] === 'object' && typeof snap['sequences'] === 'object';
+  const d = data as Record<string, any>;
+  if (d.version !== '1.0') return false;
+  if (typeof d.patient !== 'object') return false;
+  if (typeof d.sequences !== 'object') return false;
+  if (typeof d.params !== 'object') return false;
+  if (typeof d.planning !== 'object') return false;
+  if (typeof d.slice !== 'object') return false;
+  return true;
 }
 
 // ─── Firebase Cloud Storage ────────────────────────────────────────────────

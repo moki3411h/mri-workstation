@@ -29,6 +29,31 @@
   --c-font-ui:      'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
+/* ─── LIGHT THEME OVERRIDES ─────────────────────────────────────── */
+[data-theme="light"] {
+  --c-bg-deepest:   #e8ecf5;
+  --c-bg-dark:      #dde4ef;
+  --c-bg-panel:     #f0f4fa;
+  --c-bg-card:      #e4ecf7;
+  --c-bg-hover:     #d8e4f2;
+  --c-bg-selected:  #bdd5ed;
+  --c-border-faint: #c5d0e0;
+  --c-border:       #b0bece;
+  --c-border-bright:#90a4bc;
+  --c-text-dim:     #b0bece;
+  --c-text-muted:   #7a8fa8;
+  --c-text-subtle:  #5a7090;
+  --c-text-mid:     #3a5575;
+  --c-text-base:    #1c3050;
+  --c-text-bright:  #0a1a30;
+  --c-cyan:         #0284c7;
+  --c-cyan-dim:     rgba(2,132,199,0.12);
+  --c-green:        #16a34a;
+  --c-amber:        #d97706;
+  --c-red:          #dc2626;
+  --c-yellow:       #ca8a04;
+}
+
 html, body {
   width: 100vw; height: 100vh;
   overflow: hidden;

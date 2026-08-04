@@ -49,12 +49,13 @@ export default function ImageImport() {
   const [dragOver, setDragOver] = useState(false);
 
   const processFile = useCallback(async (file: File, plane: 'axial' | 'coronal' | 'sagittal') => {
+    const store = useWorkstationStore.getState();
     const raw = await readFileAsDataURL(file);
     const final = grayscale ? await grayscaleDataURL(raw) : raw;
-    setImage(plane, final);
-    setStatusMsg(`Loaded ${plane}: ${file.name}`);
+    store.setImage(plane, final);
+    store.setStatusMsg(`Loaded ${plane}: ${file.name}`);
     toast(`${plane.toUpperCase()} viewport: ${file.name}`, 'success');
-  }, [grayscale, setImage, setStatusMsg]);
+  }, [grayscale]);
 
   const handleFiles = useCallback(async (files: File[], plane: TargetPlane) => {
     if (files.length === 0) return;
@@ -71,10 +72,21 @@ export default function ImageImport() {
     }
   }, [processFile]);
 
-  const handleGlobalDrop = useCallback((e: React.DragEvent) => {
+  const handleGlobalDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
-    handleFiles(Array.from(e.dataTransfer.files), 'axial');
-  }, [handleFiles]);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+    // Single file drop → load into all 3 viewports
+    if (files.length === 1) {
+      const store = useWorkstationStore.getState();
+      const raw = await readFileAsDataURL(files[0]!);
+      const final = grayscale ? await grayscaleDataURL(raw) : raw;
+      store.setImageAll(final);
+      toast('Image loaded into all viewports', 'success');
+    } else {
+      handleFiles(files, 'all3');
+    }
+  }, [grayscale, handleFiles]);
 
   const planes: { key: TargetPlane; label: string; color: string }[] = [
     { key:'coronal',  label:'CORONAL',  color:'#ffe040' },
@@ -139,14 +151,15 @@ export default function ImageImport() {
           {/* Load defaults button */}
           <div style={{ marginTop:'12px', display:'flex', gap:'8px' }}>
             <button
-              onClick={() => {
-                const { setImage, setStatusMsg, toggleImageImport } = useWorkstationStore.getState();
-                setImage('axial',    '/mri_axial.png');
-                setImage('coronal',  '/mri_coronal.jpg');
-                setImage('sagittal', '/mri_sagittal.jpg');
-                setStatusMsg('Default brain MRI images loaded');
+            onClick={async () => {
+                const store = useWorkstationStore.getState();
+                // Load one representative image to all 3 viewports so planning activates
+                store.setImage('axial',    '/mri_axial.png');
+                store.setImage('coronal',  '/mri_coronal.jpg');
+                store.setImage('sagittal', '/mri_sagittal.jpg');
+                store.setStatusMsg('Default brain MRI images loaded — Planning active');
                 toast('Default brain MRI images loaded ✓', 'success');
-                toggleImageImport();
+                store.toggleImageImport();
               }}
               style={{ flex:1, fontSize:'9.5px', padding:'7px', background:'rgba(34,211,238,0.1)', border:'1px solid rgba(34,211,238,0.3)', color:'#22d3ee', cursor:'pointer', borderRadius:'2px', fontWeight:600 }}
             >

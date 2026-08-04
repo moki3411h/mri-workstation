@@ -6,10 +6,35 @@ import { calcSNR, getContrastType, calcResolution } from '@/lib/physics';
 // ── Types ──────────────────────────────────────────────────
 
 export type Plane = 'coronal' | 'sagittal' | 'axial';
+export type Theme = 'dark' | 'light';
 
-export interface FovState  { x: number; y: number; w: number; h: number; rot: number; }
+/** Single 3D Planning Object — source of truth for all viewports */
+export interface PlanningObject {
+  /** Center of the slab in mm from isocenter */
+  centerX: number;
+  centerY: number;
+  centerZ: number;
+  /** Rotation angles in degrees */
+  rotX: number;   // Pitch
+  rotY: number;   // Yaw
+  rotZ: number;   // Roll
+  /** Primary orientation plane */
+  orientation: 'axial' | 'coronal' | 'sagittal';
+  /** Field of View Read direction (mm) — controls width */
+  fovRead: number;
+  /** Field of View Phase direction (mm) — controls height */
+  fovPhase: number;
+  /** Number of slices */
+  sliceCount: number;
+  /** Thickness of each slice in mm */
+  sliceThickness: number;
+  /** Gap between slices in mm (negative = overlap) */
+  sliceGap: number;
+  /** Phase encoding direction */
+  phaseDir: 'AP' | 'RL' | 'HF';
+}
+
 export interface XhairState { x: number; y: number; }
-export interface SliceState { cur: number; max: number; }
 export interface WLState    { window: number; level: number; brightness: number; contrast: number; }
 
 export interface ScanState {
@@ -21,26 +46,20 @@ export interface ScanState {
 }
 
 export interface ParamsState {
-  slices:         number;
-  thickness:      number;
-  spacing:        number;
   tr:             number;
   te:             number;
   ti:             number;
   flipAngle:      number;
   bandwidth:      number;
-  etl:            number;   // echo train length
+  etl:            number;
   turboFactor:    number;
   averages:       number;
   concatenations: number;
-  fovRead:        number;   // mm
-  fovPhase:       number;   // %
   matrix:         number;
-  phaseEncoding:  string;
   fatSat:         string;
+  partialFourier: string;
   parallelImaging:string;
   position:       string;
-  orientation:    string;
   autoAlign:      string;
   coil:           string;
   filter:         string;
@@ -68,7 +87,6 @@ export interface SafetyState {
 }
 
 export type ViewMode = 'normal' | 'linked' | 'compare';
-export type ActiveTool = 'crosshair' | 'pan' | 'zoom' | 'wl' | 'measure-dist' | 'measure-angle' | 'roi' | 'annotate';
 
 export interface WorkstationStore {
   // Sequences
@@ -78,7 +96,7 @@ export interface WorkstationStore {
   // Scan
   scan: ScanState;
 
-  // Parameters
+  // Parameters (MRI protocol — NOT planning geometry)
   params: ParamsState;
 
   // Computed physics
@@ -86,27 +104,30 @@ export interface WorkstationStore {
   calcSNR:      number;
   calcContrast: string;
   calcRes:      [number, number, number];
+  taSec:        number;
 
-  // Viewport
-  fov:      Record<Plane, FovState>;
+  // THE ONE PLANNING OBJECT
+  planning: PlanningObject;
+  planningActive: boolean;  // false until first image loaded
+
+  // Viewport state
   xhair:    Record<Plane, XhairState>;
-  slice:    Record<Plane, SliceState>;
   wl:       Record<Plane, WLState>;
   activeVP: Plane;
 
-  // Images (data URLs)
+  // Images (data URLs) — same image shown in all viewports for now
   images:   Record<Plane, string | null>;
 
   // Overlay toggles
   show: {
-    fov:           boolean;
-    xhair:         boolean;
-    labels:        boolean;
-    ruler:         boolean;
-    sliceMarkers:  boolean;
-    referenceLines:boolean;
-    measurements:  boolean;
-    kspace:        boolean;
+    fov:            boolean;
+    xhair:          boolean;
+    labels:         boolean;
+    ruler:          boolean;
+    sliceMarkers:   boolean;
+    referenceLines: boolean;
+    measurements:   boolean;
+    kspace:         boolean;
   };
 
   // Patient
@@ -114,8 +135,8 @@ export interface WorkstationStore {
   safety:  SafetyState;
 
   // UI state
+  theme:         Theme;
   viewMode:      ViewMode;
-  activeTool:    ActiveTool;
   showHelp:        boolean;
   showPatient:     boolean;
   showPhysics:     boolean;
@@ -123,116 +144,140 @@ export interface WorkstationStore {
   showAI:          boolean;
   showImageImport: boolean;
   statusMsg:       string;
-  leftCollapsed: boolean;
-  rightCollapsed:boolean;
-  cineMode:      boolean;
+  leftCollapsed:   boolean;
+  rightCollapsed:  boolean;
+  cineMode:        boolean;
+  debugMode:       boolean;
 
   // Actions
-  selectSeq:     (id: number) => void;
-  startScan:     () => void;
-  pauseScan:     () => void;
-  stopScan:      () => void;
-  setScanProgress: (progress: number, remainSec: number) => void;
-  finishScan:    () => void;
-  setParam:      (key: keyof ParamsState, value: number | string) => void;
-  applyParams:   () => void;
-  setFov:        (plane: Plane, fov: Partial<FovState>) => void;
-  setXhair:      (plane: Plane, pos: XhairState) => void;
-  setSlice:      (plane: Plane, cur: number) => void;
-  setWL:         (plane: Plane, wl: Partial<WLState>) => void;
-  setActiveVP:   (plane: Plane) => void;
-  setImage:      (plane: Plane, url: string | null) => void;
-  setShow:       (key: keyof WorkstationStore['show'], value: boolean) => void;
-  setPatient:    (patient: Partial<PatientState>) => void;
-  setSafety:     (safety: Partial<SafetyState>) => void;
-  setViewMode:   (mode: ViewMode) => void;
-  setActiveTool: (tool: ActiveTool) => void;
-  setStatusMsg:  (msg: string) => void;
-  toggleLeft:    () => void;
-  toggleRight:   () => void;
-  toggleHelp:    () => void;
-  togglePatient: () => void;
-  togglePhysics: () => void;
+  selectSeq:        (id: number) => void;
+  startScan:        () => void;
+  pauseScan:        () => void;
+  stopScan:         () => void;
+  setScanProgress:  (progress: number, remainSec: number) => void;
+  finishScan:       () => void;
+  setParam:         (key: keyof ParamsState, value: number | string) => void;
+  applyParams:      () => void;
+  setPlanning:      (p: Partial<PlanningObject>) => void;
+  setPlanningOrientation: (orientation: PlanningObject['orientation']) => void;
+  setXhair:         (plane: Plane, pos: XhairState) => void;
+  setWL:            (plane: Plane, wl: Partial<WLState>) => void;
+  setActiveVP:      (plane: Plane) => void;
+  setImage:         (plane: Plane, url: string | null) => void;
+  setImageAll:      (url: string) => void;
+  setShow:          (key: keyof WorkstationStore['show'], value: boolean) => void;
+  setPatient:       (patient: Partial<PatientState>) => void;
+  setSafety:        (safety: Partial<SafetyState>) => void;
+  setViewMode:      (mode: ViewMode) => void;
+  setStatusMsg:     (msg: string) => void;
+  setTheme:         (theme: Theme) => void;
+  toggleLeft:       () => void;
+  toggleRight:      () => void;
+  toggleHelp:       () => void;
+  togglePatient:    () => void;
+  togglePhysics:    () => void;
+  toggleDebug:      () => void;
   toggleLearning:   () => void;
   toggleAI:         () => void;
   toggleImageImport:() => void;
+  toggleTheme:      () => void;
   reorderSeq:       (fromId: number, toId: number) => void;
   deleteSeq:        (id: number) => void;
   duplicateSeq:     (id: number) => void;
   moveSeq:          (id: number, dir: 'up' | 'down') => void;
   loadExam:         (snap: import('@/lib/examPersistence').ExamSnapshot) => void;
-  resetViewport: (plane: Plane) => void;
-  resetAll:      () => void;
-  toggleCine:    () => void;
+  resetViewport:    (plane: Plane) => void;
+  resetAll:         () => void;
+  resetPlanning:    () => void;
+  toggleCine:       () => void;
 }
 
 // ── Default values ─────────────────────────────────────────
 
-const defaultFov: FovState   = { x:0.15, y:0.15, w:0.70, h:0.70, rot:0 };
-const defaultXhair: XhairState = { x:0.5,  y:0.5  };
-const defaultWL: WLState       = { window:1200, level:600, brightness:1, contrast:1.15 };
+export const defaultPlanning: PlanningObject = {
+  centerX: 0, centerY: 0, centerZ: 0,
+  rotX: 0, rotY: 0, rotZ: 0,
+  orientation: 'axial',
+  fovRead: 220,
+  fovPhase: 220,
+  sliceCount: 24,
+  sliceThickness: 4,
+  sliceGap: 0.4,
+  phaseDir: 'AP',
+};
+
+const defaultXhair: XhairState = { x: 0.5, y: 0.5 };
+const defaultWL: WLState       = { window: 1200, level: 600, brightness: 1, contrast: 1.15 };
 
 const defaultParams: ParamsState = {
-  slices:24, thickness:4, spacing: 0, tr:2000, te:9, ti:0, flipAngle:150,
-  bandwidth:145, etl:9, turboFactor:9, averages:1, concatenations:2,
-  fovRead:220, fovPhase:100, matrix:320,
-  phaseEncoding:'AP', fatSat:'None', parallelImaging:'GRAPPA ×2',
-  position:'L3.1 P21.5 F2.2', orientation:'S > C3.8 > T1.4',
-  autoAlign:'Head > Basis', coil:'HE1-4; NE1,2; SP1', filter:'Prescan Normalize',
+  tr: 2000, te: 9, ti: 0, flipAngle: 150,
+  bandwidth: 145, etl: 9, turboFactor: 9, averages: 1, concatenations: 2,
+  matrix: 320,
+  fatSat: 'None', partialFourier: 'Off', parallelImaging: 'GRAPPA ×2',
+  position: 'L3.1 P21.5 F2.2',
+  autoAlign: 'Head > Basis', coil: 'HE1-4; NE1,2; SP1', filter: 'Prescan Normalize',
 };
 
 const defaultPatient: PatientState = {
-  name:'ANONYMOUS', dob:'1975-03-12', sex:'M', weight:75, height:175,
-  study:'Brain Protocol — Routine', accession:'ACC20240723', patientId:'MR-001',
+  name: 'ANONYMOUS', dob: '1975-03-12', sex: 'M', weight: 75, height: 175,
+  study: 'Brain Protocol — Routine', accession: 'ACC20240723', patientId: 'MR-001',
 };
 
 const defaultSafety: SafetyState = {
-  implant:false, pacemaker:false, pregnant:false,
-  contrastAllergy:false, claustrophobia:false,
-  previousMRI:true, emergencyContact:'',
+  implant: false, pacemaker: false, pregnant: false,
+  contrastAllergy: false, claustrophobia: false,
+  previousMRI: true, emergencyContact: '',
 };
 
-function computePhysics(p: ParamsState) {
-  const taSec = calculateTA({ slices:p.slices, tr:p.tr, te:p.te, averages:p.averages, concatenations:p.concatenations, turboFactor:p.turboFactor, matrix:p.matrix });
-  const snr = calcSNR({ tr:p.tr, te:p.te, sliceThickness:p.thickness, nex:p.averages, fov:p.fovRead, matrix:p.matrix });
+function computePhysics(p: ParamsState, plan: PlanningObject) {
+  const taSec = calculateTA({
+    slices: plan.sliceCount, tr: p.tr, te: p.te, averages: p.averages,
+    concatenations: p.concatenations, turboFactor: p.turboFactor,
+    matrix: p.matrix, fovPhase: (plan.fovPhase / plan.fovRead) * 100,
+    partialFourier: p.partialFourier,
+    parallelImaging: p.parallelImaging, phaseEncoding: plan.phaseDir,
+  });
+  const snr = calcSNR({ tr: p.tr, te: p.te, sliceThickness: plan.sliceThickness, nex: p.averages, fov: plan.fovRead, matrix: p.matrix });
   const contrast = getContrastType(p.tr, p.te, p.ti, p.filter.includes('FLAIR') || false);
-  const res = calcResolution(p.fovRead, p.matrix, p.thickness);
-  return { calcTA: formatTime(taSec), calcSNR: snr, calcContrast: contrast, calcRes: res };
+  const res = calcResolution(plan.fovRead, p.matrix, plan.sliceThickness);
+  return { calcTA: formatTime(taSec), calcSNR: snr, calcContrast: contrast, calcRes: res, taSec };
 }
 
 // ── Store ──────────────────────────────────────────────────
 
 export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
-  sequences:    [...SEQUENCES],
+  sequences:     [...SEQUENCES],
   selectedSeqId: 1,
-  scan:         { running:false, paused:false, seqId:null, progress:0, remainSec:0 },
-  params:       defaultParams,
-  ...computePhysics(defaultParams),
+  scan:          { running: false, paused: false, seqId: null, progress: 0, remainSec: 0 },
+  params:        defaultParams,
+  ...computePhysics(defaultParams, defaultPlanning),
 
-  fov:   { coronal:{...defaultFov}, sagittal:{...defaultFov, x:0.20, y:0.20, w:0.60, h:0.60}, axial:{...defaultFov} },
-  xhair: { coronal:{...defaultXhair}, sagittal:{...defaultXhair}, axial:{...defaultXhair} },
-  slice: { coronal:{cur:1,max:24}, sagittal:{cur:1,max:22}, axial:{cur:12,max:30} },
-  wl:    { coronal:{...defaultWL}, sagittal:{...defaultWL}, axial:{...defaultWL} },
+  planning:       { ...defaultPlanning },
+  planningActive: false,
+
+  xhair:    { coronal: { ...defaultXhair }, sagittal: { ...defaultXhair }, axial: { ...defaultXhair } },
+  wl:       { coronal: { ...defaultWL }, sagittal: { ...defaultWL }, axial: { ...defaultWL } },
   activeVP: 'axial',
-  images: { coronal:null, sagittal:null, axial:null },
+  images:   { coronal: null, sagittal: null, axial: null },
 
-  show: { fov:true, xhair:true, labels:true, ruler:false, sliceMarkers:true, referenceLines:true, measurements:true, kspace:false },
+  show: { fov: true, xhair: true, labels: true, ruler: false, sliceMarkers: false, referenceLines: true, measurements: true, kspace: false },
 
   patient: defaultPatient,
   safety:  defaultSafety,
 
+  theme:         'dark',
   viewMode:      'normal',
-  activeTool:    'crosshair',
   showHelp:        false,
   showPatient:     false,
   showPhysics:     false,
   showLearning:    false,
   showAI:          false,
   showImageImport: false,
-  statusMsg:     'System Ready — Sequence selected: Scout',
+  statusMsg:     'System Ready — Load an image or begin planning',
   leftCollapsed: false,
-  rightCollapsed:false,
-  cineMode:      false,
+  rightCollapsed: false,
+  cineMode: false,
+  debugMode: false,
 
   // ── Actions ──
 
@@ -240,8 +285,17 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     const seq = get().sequences.find(s => s.id === id);
     if (!seq) return;
     const p = get().params;
-    const newParams = { ...p, slices:seq.sl, tr:seq.tr, te:seq.te, ti:seq.ti, flipAngle:seq.flipAngle };
-    set({ selectedSeqId: id, params: newParams, statusMsg: `Selected: ${seq.name}`, ...computePhysics(newParams) });
+    const plan = get().planning;
+    const newParams = { ...p, tr: seq.tr, te: seq.te, ti: seq.ti, flipAngle: seq.flipAngle };
+    // Infer orientation from sequence name
+    const lower = seq.name.toLowerCase();
+    let orientation: PlanningObject['orientation'] = plan.orientation;
+    if (lower.includes('tra') || lower.includes('axial')) orientation = 'axial';
+    else if (lower.includes('cor')) orientation = 'coronal';
+    else if (lower.includes('sag')) orientation = 'sagittal';
+    const newPlan = { ...plan, sliceCount: seq.sl, orientation };
+    const computed = computePhysics(newParams, newPlan);
+    set({ selectedSeqId: id, params: newParams, planning: newPlan, statusMsg: `Selected: ${seq.name}`, ...computed });
   },
 
   startScan: () => {
@@ -262,7 +316,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     const taSec = parseInt(seq.ta.split(':')[0]!) * 60 + parseInt(seq.ta.split(':')[1] ?? '0');
     set({
       sequences: newSeqs,
-      scan: { running:true, paused:false, seqId:seq.id, progress:0, remainSec:taSec },
+      scan: { running: true, paused: false, seqId: seq.id, progress: 0, remainSec: taSec },
       selectedSeqId: seq.id,
       statusMsg: `Scanning: ${seq.name}`,
     });
@@ -281,7 +335,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     );
     set({
       sequences: newSeqs,
-      scan: { running:false, paused:false, seqId:null, progress:0, remainSec:0 },
+      scan: { running: false, paused: false, seqId: null, progress: 0, remainSec: 0 },
       statusMsg: 'Scan aborted',
     });
   },
@@ -295,7 +349,6 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     const finishedSeqs = sequences.map(s =>
       s.id === scan.seqId ? { ...s, status: 'done' as const } : s
     );
-    // Advance next pending → active
     let advanced = false;
     const advancedSeqs = finishedSeqs.map(s => {
       if (!advanced && s.status === 'pending') { advanced = true; return { ...s, status: 'active' as const }; }
@@ -304,81 +357,82 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     const seq = sequences.find(s => s.id === scan.seqId);
     set({
       sequences: advancedSeqs,
-      scan: { running:false, paused:false, seqId:null, progress:0, remainSec:0 },
-      statusMsg: seq ? `Completed: ${seq.name} — Auto-playing slices` : 'Sequence complete',
-      cineMode: true, // Trigger cine loop on completion
+      scan: { running: false, paused: false, seqId: null, progress: 0, remainSec: 0 },
+      statusMsg: seq ? `Completed: ${seq.name}` : 'Sequence complete',
+      cineMode: !advanced,
     });
+
+    if (advanced) {
+      setTimeout(() => { get().startScan(); }, 500);
+    }
   },
 
   setParam: (key, value) => {
-    const newParams = { ...get().params, [key]: value };
-    set({ params: newParams, ...computePhysics(newParams) });
+    const state = get();
+    const newParams = { ...state.params, [key]: value };
+    const computed = computePhysics(newParams, state.planning);
+    const newSeqs = state.sequences.map(s =>
+      s.id === state.selectedSeqId ? { ...s, ta: computed.calcTA, tr: newParams.tr, te: newParams.te } : s
+    );
+    set({ params: newParams, sequences: newSeqs, ...computed });
   },
 
   applyParams: () => {
-    const { params, selectedSeqId, sequences } = get();
-    const newParams = { ...params };
-    const computed = computePhysics(newParams);
-    const newSeqs = sequences.map(s =>
-      s.id === selectedSeqId ? { ...s, ta: computed.calcTA, sl: params.slices, tr: params.tr, te: params.te } : s
-    );
-    set({ params: newParams, sequences: newSeqs, ...computed, statusMsg: 'Parameters applied ✓' });
+    set({ statusMsg: 'Parameters applied ✓' });
   },
 
-  setFov:    (plane, fov)    => set(s => ({ fov:   { ...s.fov,   [plane]: { ...s.fov[plane],   ...fov  } } })),
-  setXhair:  (plane, pos)    => set(s => ({ xhair: { ...s.xhair, [plane]: pos } })),
-  setSlice:  (plane, cur)    => set(s => {
-    const sl = s.slice[plane];
-    const safeCur = Math.max(1, Math.min(sl.max, cur));
-    
-    // Determine active target plane to resize the correct FOV
-    const seq = s.sequences.find(sq => sq.id === s.selectedSeqId);
-    let targetPlane: Plane = 'axial';
-    if (seq) {
-      const lower = seq.name.toLowerCase();
-      if (lower.includes('axial')) targetPlane = 'axial';
-      else if (lower.includes('coronal')) targetPlane = 'coronal';
-      else if (lower.includes('sagittal')) targetPlane = 'sagittal';
-    }
+  setPlanning: (p) => {
+    const newPlan = { ...get().planning, ...p };
+    const computed = computePhysics(get().params, newPlan);
+    const newSeqs = get().sequences.map(s =>
+      s.id === get().selectedSeqId ? { ...s, ta: computed.calcTA, sl: newPlan.sliceCount } : s
+    );
+    set({ planning: newPlan, sequences: newSeqs, ...computed });
+  },
 
-    // Calculate previous scale and new scale to find the relative change ratio
-    const prevT = sl.max > 1 ? (sl.cur - 1) / (sl.max - 1) : 0.5;
-    const newT = sl.max > 1 ? (safeCur - 1) / (sl.max - 1) : 0.5;
-    
-    // Brain size peaks at middle slice
-    const prevScale = 0.6 + 0.4 * Math.sin(prevT * Math.PI); 
-    const newScale = 0.6 + 0.4 * Math.sin(newT * Math.PI); 
-    
-    // Ratio of change
-    const ratio = newScale / prevScale;
+  setPlanningOrientation: (orientation) => {
+    const newPlan = { ...get().planning, orientation, rotX: 0, rotY: 0, rotZ: 0 };
+    const computed = computePhysics(get().params, newPlan);
+    set({ planning: newPlan, ...computed, statusMsg: `Orientation: ${orientation.toUpperCase()}` });
+  },
 
-    // Apply ratio to current FOV size to preserve user dragging
-    const currFov = s.fov[targetPlane];
-    const newW = Math.max(0.1, currFov.w * ratio);
-    const newH = Math.max(0.1, currFov.h * ratio);
-
-    return { 
-      slice: { ...s.slice, [plane]: { ...sl, cur: safeCur } },
-      fov: { ...s.fov, [targetPlane]: { ...currFov, w: newW, h: newH } }
-    };
-  }),
-  setWL:     (plane, wl)     => set(s => ({ wl:    { ...s.wl,    [plane]: { ...s.wl[plane],    ...wl   } } })),
+  setXhair:    (plane, pos)  => set(s => ({ xhair: { ...s.xhair, [plane]: pos } })),
+  setWL:       (plane, wl)   => set(s => ({ wl: { ...s.wl, [plane]: { ...s.wl[plane], ...wl } } })),
   setActiveVP: (plane)       => set({ activeVP: plane }),
-  setImage:  (plane, url)    => set(s => ({ images: { ...s.images, [plane]: url } })),
-  setShow:   (key, value)    => set(s => ({ show:   { ...s.show,   [key]: value } })),
-  setPatient: (patient)      => set(s => ({ patient: { ...s.patient, ...patient } })),
-  setSafety:  (safety)       => set(s => ({ safety: { ...s.safety, ...safety } })),
-  setViewMode: (mode)        => set({ viewMode: mode }),
-  setActiveTool: (tool)      => set({ activeTool: tool }),
-  setStatusMsg: (msg)        => set({ statusMsg: msg }),
-  toggleLeft:    ()          => set(s => ({ leftCollapsed:  !s.leftCollapsed })),
-  toggleRight:   ()          => set(s => ({ rightCollapsed: !s.rightCollapsed })),
-  toggleHelp:    ()          => set(s => ({ showHelp:    !s.showHelp })),
-  togglePatient: ()          => set(s => ({ showPatient: !s.showPatient })),
-  togglePhysics: ()          => set(s => ({ showPhysics: !s.showPhysics })),
-  toggleLearning:   () => set(s => ({ showLearning:    !s.showLearning })),
-  toggleAI:         () => set(s => ({ showAI:           !s.showAI })),
+
+  setImage: (plane, url) => {
+    set(s => {
+      const newImages = { ...s.images, [plane]: url };
+      const hasAny = Object.values(newImages).some(v => v !== null);
+      return { images: newImages, planningActive: hasAny };
+    });
+  },
+
+  setImageAll: (url) => {
+    set({
+      images: { coronal: url, sagittal: url, axial: url },
+      planningActive: true,
+      statusMsg: 'Image loaded — Planning active',
+    });
+  },
+
+  setShow:    (key, value) => set(s => ({ show: { ...s.show, [key]: value } })),
+  setPatient: (patient)   => set(s => ({ patient: { ...s.patient, ...patient } })),
+  setSafety:  (safety)    => set(s => ({ safety: { ...s.safety, ...safety } })),
+  setViewMode: (mode)     => set({ viewMode: mode }),
+  setStatusMsg: (msg)     => set({ statusMsg: msg }),
+  setTheme: (theme)       => set({ theme }),
+
+  toggleLeft:       () => set(s => ({ leftCollapsed: !s.leftCollapsed })),
+  toggleRight:      () => set(s => ({ rightCollapsed: !s.rightCollapsed })),
+  toggleHelp:       () => set(s => ({ showHelp: !s.showHelp })),
+  togglePatient:    () => set(s => ({ showPatient: !s.showPatient })),
+  togglePhysics:    () => set(s => ({ showPhysics: !s.showPhysics })),
+  toggleDebug:      () => set(s => ({ debugMode: !s.debugMode })),
+  toggleLearning:   () => set(s => ({ showLearning: !s.showLearning })),
+  toggleAI:         () => set(s => ({ showAI: !s.showAI })),
   toggleImageImport:() => set(s => ({ showImageImport: !s.showImageImport })),
+  toggleTheme:      () => set(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
 
   reorderSeq: (fromId, toId) => set(s => {
     const seqs = [...s.sequences];
@@ -423,29 +477,35 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     safety:    snap.safety,
     sequences: snap.sequences,
     params:    snap.params,
-    fov:       snap.fov,
-    slice:     snap.slice,
+    planning:  (snap as any).planning ?? { ...defaultPlanning },
     wl:        snap.wl,
     show:      snap.show,
     statusMsg: `Exam loaded: ${snap.patient.name} — ${new Date(snap.savedAt).toLocaleString()}`,
-    ...computePhysics(snap.params),
+    ...computePhysics(snap.params, (snap as any).planning ?? defaultPlanning),
   }),
 
   toggleCine: () => set(s => ({ cineMode: !s.cineMode, statusMsg: !s.cineMode ? 'Cine playback started' : 'Cine playback stopped' })),
 
   resetViewport: (plane) => {
     set(s => ({
-      fov:   { ...s.fov,   [plane]: { ...defaultFov } },
       xhair: { ...s.xhair, [plane]: { ...defaultXhair } },
+      wl: { ...s.wl, [plane]: { ...defaultWL } },
     }));
   },
 
+  resetPlanning: () => {
+    const computed = computePhysics(get().params, defaultPlanning);
+    set({ planning: { ...defaultPlanning }, ...computed, statusMsg: 'Planning reset' });
+  },
+
   resetAll: () => {
+    const computed = computePhysics(get().params, defaultPlanning);
     set({
-      fov:   { coronal:{...defaultFov}, sagittal:{...defaultFov,x:0.20,y:0.20,w:0.60,h:0.60}, axial:{...defaultFov} },
-      xhair: { coronal:{...defaultXhair}, sagittal:{...defaultXhair}, axial:{...defaultXhair} },
-      wl:    { coronal:{...defaultWL}, sagittal:{...defaultWL}, axial:{...defaultWL} },
+      planning: { ...defaultPlanning },
+      xhair: { coronal: { ...defaultXhair }, sagittal: { ...defaultXhair }, axial: { ...defaultXhair } },
+      wl:    { coronal: { ...defaultWL }, sagittal: { ...defaultWL }, axial: { ...defaultWL } },
       statusMsg: 'All viewports reset',
+      ...computed,
     });
   },
 }));

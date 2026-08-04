@@ -1,70 +1,86 @@
 'use client';
 import { useEffect, useRef, useCallback } from 'react';
-import { useWorkstationStore, type Plane, type FovState } from '@/store/workstationStore';
+import { useWorkstationStore, type PlanningObject } from '@/store/workstationStore';
+import {
+  type Plane,
+  project3Dto2D, unproject2Dto3D,
+  getFovHandles2D, hitTestFov, projectSliceLines,
+  getPlanningTargetPlane, CURSOR_MAP,
+  VIEW_FOV_MM,
+} from '@/lib/geometry';
 import { toast } from '@/lib/toast';
 
-const ORIENT: Record<Plane, { top:string; bottom:string; left:string; right:string }> = {
-  coronal:  { top:'S', bottom:'I', left:'R', right:'L' },
-  sagittal: { top:'S', bottom:'I', left:'A', right:'P' },
-  axial:    { top:'A', bottom:'P', left:'R', right:'L' },
-};
-const PLANE_COLOR: Record<Plane, string> = { coronal:'#ffe040', sagittal:'#60d0ff', axial:'#60ffa0' };
-const PLANE_LABEL: Record<Plane, string> = { coronal:'COR', sagittal:'SAG', axial:'TRA' };
-const HANDLE_R = 0.04;
-const MIN_SIZE = 0.1;
+// ── Constants ──────────────────────────────────────────────
 
-const CURSOR_MAP: Record<string, string> = {
-  move: 'move',
-  rotate: 'grab',
-  top: 'ns-resize', bottom: 'ns-resize', 
-  left: 'ew-resize', right: 'ew-resize',
-  tl: 'nwse-resize', br: 'nwse-resize', 
-  tr: 'nesw-resize', bl: 'nesw-resize',
+const ORIENT: Record<Plane, { top: string; bottom: string; left: string; right: string }> = {
+  coronal:  { top: 'S', bottom: 'I', left: 'L', right: 'R' },
+  sagittal: { top: 'S', bottom: 'I', left: 'A', right: 'P' },
+  axial:    { top: 'A', bottom: 'P', left: 'R', right: 'L' },
 };
+
+const PLANE_COLOR: Record<Plane, string> = {
+  coronal:  '#ffe040',
+  sagittal: '#60d0ff',
+  axial:    '#60ffa0',
+};
+
+const PLANE_LABEL: Record<Plane, string> = {
+  coronal:  'COR',
+  sagittal: 'SAG',
+  axial:    'TRA',
+};
+
+// ── Types ──────────────────────────────────────────────────
+
+interface DragState {
+  type: 'fov' | 'pan' | 'wl';
+  handle?: string;
+  startX: number; startY: number;
+  initPlan?: PlanningObject;
+  initPanX?: number; initPanY?: number;
+  initW?: number; initL?: number;
+}
 
 interface Props { plane: Plane; }
 
+// ── Component ─────────────────────────────────────────────
+
 export default function MRIViewport({ plane }: Props) {
-  const store    = useWorkstationStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
   const imgRef    = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
   const rafRef    = useRef<number>(0);
-  
-  // Drag State
-  const drag = useRef<{ 
-    handle: string; 
-    startX: number; 
-    startY: number; 
-    initFov: FovState;
-  } | null>(null);
-  
-  const spacePressedRef = useRef(false);
+  const drag      = useRef<DragState | null>(null);
+  const pan       = useRef({ x: 0, y: 0 });
   const zoom      = useRef(1);
 
-  // Sync image or video
+  // ── Image loading ─────────────────────────────────────────
+
   useEffect(() => {
+    const store = useWorkstationStore.getState();
     const url = store.images[plane];
     if (!url) { imgRef.current = null; return; }
-    
-    // Check if it's a video based on blob URL or string prefix
-    const isVideo = url.startsWith('blob:') && url.includes('video') || url.startsWith('data:video/') || url.endsWith('.mp4');
-    
+
+    const isVideo =
+      (url.startsWith('blob:') && url.includes('video')) ||
+      url.startsWith('data:video/') ||
+      url.endsWith('.mp4');
+
     if (isVideo) {
       const vid = document.createElement('video');
-      vid.muted = true;
-      vid.playsInline = true;
+      vid.muted = true; vid.playsInline = true;
       vid.onloadedmetadata = () => { imgRef.current = vid; };
-      vid.src = url;
-      vid.load();
+      vid.src = url; vid.load();
     } else {
       const img = new Image();
       img.onload = () => { imgRef.current = img; };
       img.src = url;
     }
-  }, [store.images[plane]]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useWorkstationStore(s => s.images[plane])]);
 
-  // Canvas sizing
+  // ── Canvas sizing ──────────────────────────────────────────
+
   useEffect(() => {
     const wrap = wrapRef.current; const c = canvasRef.current;
     if (!wrap || !c) return;
@@ -75,615 +91,596 @@ export default function MRIViewport({ plane }: Props) {
     });
     ro.observe(wrap);
     const r = wrap.getBoundingClientRect();
-    c.width = Math.max(1, Math.round(r.width));
+    c.width  = Math.max(1, Math.round(r.width));
     c.height = Math.max(1, Math.round(r.height));
     return () => ro.disconnect();
   }, []);
 
-  // ─── INTERACTION LOGIC ──────────────────────────────────────────────────
+  // ── Position utility ──────────────────────────────────────
 
-  const getPos = useCallback((e: React.PointerEvent): { x: number; y: number } => {
-    const c = canvasRef.current!; const r = c.getBoundingClientRect();
-    return { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height };
-  }, []);
-
-  const hitHandle = useCallback((px: number, py: number, f: FovState, W: number, H: number): string | null => {
-    const cx = (f.x + f.w/2) * W;
-    const cy = (f.y + f.h/2) * H;
-    const ang = f.rot * Math.PI / 180;
-    
-    const pxx = px * W;
-    const pyy = py * H;
-    
-    const dx = pxx - cx;
-    const dy = pyy - cy;
-    
-    // Local coords (unrotated, in pixels)
-    const lx = dx * Math.cos(-ang) - dy * Math.sin(-ang);
-    const ly = dx * Math.sin(-ang) + dy * Math.cos(-ang);
-    
-    const hw = (f.w/2) * W;
-    const hh = (f.h/2) * H;
-    
-    // Handles and corners in pixels
-    const corners = [
-      {n:'tl',lx:-hw,ly:-hh},{n:'tr',lx:hw,ly:-hh},
-      {n:'br',lx:hw,ly:hh},{n:'bl',lx:-hw,ly:hh},
-      {n:'rotate',lx:0,ly:-hh-20} // match render
-    ];
-    
-    const HIT_R = 14; 
-    for (const h of corners) {
-      if (Math.hypot(lx - h.lx, ly - h.ly) < HIT_R) return h.n;
-    }
-
-    // Edges
-    const EDGE_R = 10;
-    if (Math.abs(ly - (-hh)) < EDGE_R && Math.abs(lx) <= hw) return 'top';
-    if (Math.abs(ly - (hh)) < EDGE_R && Math.abs(lx) <= hw) return 'bottom';
-    if (Math.abs(lx - (-hw)) < EDGE_R && Math.abs(ly) <= hh) return 'left';
-    if (Math.abs(lx - (hw)) < EDGE_R && Math.abs(ly) <= hh) return 'right';
-    
-    if (Math.abs(lx) < hw && Math.abs(ly) < hh) return 'move';
-    return null;
-  }, []);
-
-  const startDrag = (e: React.PointerEvent) => {
-    e.preventDefault();
-    if (e.button !== 0) return;
+  const getPos = useCallback((e: PointerEvent | React.PointerEvent) => {
     const c = canvasRef.current!;
-    try { c.setPointerCapture(e.pointerId); } catch(err) {}
+    const r = c.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  }, []);
+
+  // ── Interaction ──────────────────────────────────────────
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    const c = canvasRef.current!;
+    try { c.setPointerCapture(e.pointerId); } catch (_) {}
     
+    const store = useWorkstationStore.getState();
     store.setActiveVP(plane);
     const pos = getPos(e);
-    const currentState = useWorkstationStore.getState();
     
-    const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
-    let targetPlane = plane;
-    if (seq) {
-      const lower = seq.name.toLowerCase();
-      if (lower.includes('axial')) targetPlane = 'axial';
-      else if (lower.includes('coronal')) targetPlane = 'coronal';
-      else if (lower.includes('sagittal')) targetPlane = 'sagittal';
+    // Check if planning is active
+    if (!store.planningActive) return;
+
+    // ── Right Click / Ctrl+Left → Window/Level ──
+    if (e.button === 2 || (e.button === 0 && e.ctrlKey)) {
+      drag.current = {
+        type: 'wl', startX: pos.x, startY: pos.y,
+        initW: store.wl[plane].window, initL: store.wl[plane].level,
+      };
+      c.style.cursor = 'ew-resize';
+      return;
     }
 
-    const f = currentState.fov[targetPlane];
-    const h = hitHandle(pos.x, pos.y, f, c.width, c.height);
-    
-    if (h && currentState.activeTool === 'crosshair') {
-      drag.current = { handle: h, startX: pos.x, startY: pos.y, initFov: { ...f } };
-      c.style.cursor = h === 'rotate' ? 'grabbing' : (CURSOR_MAP[h] || 'default');
-    } else if (h) {
-      drag.current = { handle: h, startX: pos.x, startY: pos.y, initFov: { ...f } };
-      c.style.cursor = h === 'rotate' ? 'grabbing' : (CURSOR_MAP[h] || 'default');
-    } else if (currentState.activeTool === 'crosshair') {
-      store.setXhair(plane, pos);
+    // ── Middle Click / Shift+Left → Pan ──
+    if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+      drag.current = {
+        type: 'pan', startX: pos.x, startY: pos.y,
+        initPanX: pan.current.x, initPanY: pan.current.y,
+      };
+      c.style.cursor = 'grabbing';
+      return;
     }
-  };
 
-  const handleDragMove = (dx: number, dy: number, initFov: FovState): FovState => {
-    let nx = initFov.x + dx;
-    let ny = initFov.y + dy;
-    
-    // Constraint: Prevent center marker from moving outside the image boundaries
-    const cx = nx + initFov.w / 2;
-    const cy = ny + initFov.h / 2;
-    if (cx < 0.05) nx += (0.05 - cx);
-    if (cx > 0.95) nx -= (cx - 0.95);
-    if (cy < 0.05) ny += (0.05 - cy);
-    if (cy > 0.95) ny -= (cy - 0.95);
+    // ── Left Click → FOV or blank ──
+    if (e.button !== 0) return;
 
-    return { ...initFov, x: nx, y: ny };
-  };
+    const targetPlane = getPlanningTargetPlane(store.planning);
+    const isTarget = targetPlane === plane;
 
-  const handleRotate = (pos: {x:number, y:number}, startX: number, startY: number, initFov: FovState, W: number, H: number): FovState => {
-    const cx = (initFov.x + initFov.w / 2) * W;
-    const cy = (initFov.y + initFov.h / 2) * H;
-    const pxx = pos.x * W; const pyy = pos.y * H;
-    const sxx = startX * W; const syy = startY * H;
-    
-    const a0 = Math.atan2(syy - cy, sxx - cx); 
-    const a1 = Math.atan2(pyy - cy, pxx - cx); 
-    return { ...initFov, rot: initFov.rot + (a1 - a0) * 180 / Math.PI };
-  };
+    if (isTarget) {
+      // On the active planning view: full FOV interaction
+      const handles = getFovHandles2D(store.planning, plane, c.width, c.height);
+      const hitResult = hitTestFov(pos.x * c.width, pos.y * c.height, handles);
 
-  const handleResize = (handle: string, ldx: number, ldy: number, initFov: FovState, W: number, H: number, shift: boolean, alt: boolean): FovState => {
-    const nf = { ...initFov };
-    let { x, y, w, h } = initFov;
-    
-    const ndx = ldx / W;
-    const ndy = ldy / H;
-
-    const isRight = handle === 'right' || handle === 'tr' || handle === 'br';
-    const isLeft = handle === 'left' || handle === 'tl' || handle === 'bl';
-    const isBottom = handle === 'bottom' || handle === 'bl' || handle === 'br';
-    const isTop = handle === 'top' || handle === 'tl' || handle === 'tr';
-    const isCorner = handle === 'tl' || handle === 'tr' || handle === 'bl' || handle === 'br';
-
-    let dw = 0;
-    let dh = 0;
-
-    if (isRight)  dw = ndx;
-    if (isLeft)   dw = -ndx;
-    if (isBottom) dh = ndy;
-    if (isTop)    dh = -ndy;
-
-    if (shift && isCorner) {
-      // Preserve aspect ratio
-      const ratio = (initFov.w * W) / (initFov.h * H);
-      const absDwxW = Math.abs(dw * W);
-      const absDhyH = Math.abs(dh * H);
-      if (absDwxW > absDhyH) {
-        dh = Math.sign(dh) * Math.abs((dw * W) / ratio / H);
+      if (hitResult) {
+        drag.current = { type: 'fov', handle: hitResult, startX: pos.x, startY: pos.y, initPlan: { ...store.planning } };
+        c.style.cursor = hitResult === 'rotate' ? 'grabbing' : (CURSOR_MAP[hitResult] || 'move');
       } else {
-        dw = Math.sign(dw) * Math.abs((dh * H * ratio) / W);
+        // Click anywhere on image → reposition center of FOV there
+        const dxPx = (pos.x - 0.5) * c.width;
+        const dyPx = (pos.y - 0.5) * c.height;
+        const d3 = unproject2Dto3D(dxPx / zoom.current, dyPx / zoom.current, plane, c.width, c.height);
+        const newPlan = {
+          ...store.planning,
+          centerX: d3.x, centerY: d3.y, centerZ: d3.z,
+        };
+        store.setPlanning(newPlan);
+        drag.current = {
+          type: 'fov', handle: 'move', startX: pos.x, startY: pos.y,
+          initPlan: newPlan,
+        };
+        c.style.cursor = 'move';
       }
-    }
-
-    if (alt) {
-      // Resize from center
-      const nw = Math.max(MIN_SIZE, initFov.w + 2 * dw);
-      const nh = Math.max(MIN_SIZE, initFov.h + 2 * dh);
-      w = nw; h = nh;
-      x = initFov.x + (initFov.w - nw) / 2;
-      y = initFov.y + (initFov.h - nh) / 2;
     } else {
-      // Normal resize
-      const nw = Math.max(MIN_SIZE, initFov.w + dw);
-      const nh = Math.max(MIN_SIZE, initFov.h + dh);
-      const actualDw = nw - initFov.w;
-      const actualDh = nh - initFov.h;
-
-      w = nw; h = nh;
-      // If we move the left/top edge, the origin (x,y) moves
-      const ang = initFov.rot * Math.PI / 180;
-      let ox = 0, oy = 0;
-      if (isLeft) { ox -= actualDw; }
-      if (isTop)  { oy -= actualDh; }
-
-      // Apply rotation to origin shift
-      x += ox * Math.cos(ang) - oy * Math.sin(ang * (H/W));
-      y += ox * Math.sin(ang * (W/H)) + oy * Math.cos(ang);
+      // On projected views: drag the slab (move along normal direction)
+      drag.current = { type: 'fov', handle: 'move', startX: pos.x, startY: pos.y, initPlan: { ...store.planning } };
+      c.style.cursor = 'move';
     }
-    
-    nf.x = Math.max(0, Math.min(1 - w, x));
-    nf.y = Math.max(0, Math.min(1 - h, y));
-    nf.w = w; nf.h = h;
-    return nf;
-  };
+  }, [plane, getPos]);
 
-  const updateOrthogonalViews = (targetP: Plane, nf: FovState) => {
-    store.setFov(targetP, nf);
-    // Real-time parameter sync
-    const posX = ((nf.x + nf.w/2) - 0.5) * 300;
-    const posY = ((nf.y + nf.h/2) - 0.5) * 300;
-    store.setParam('position', `L${Math.abs(posX).toFixed(1)} P${Math.abs(posY).toFixed(1)} F2.2`);
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     const c = canvasRef.current!;
     const pos = getPos(e);
-    
+    const state = useWorkstationStore.getState();
+
     if (drag.current) {
-      const currentState = useWorkstationStore.getState();
-      const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
-      let targetPlane = plane;
-      if (seq) {
-        const lower = seq.name.toLowerCase();
-        if (lower.includes('axial')) targetPlane = 'axial';
-        else if (lower.includes('coronal')) targetPlane = 'coronal';
-        else if (lower.includes('sagittal')) targetPlane = 'sagittal';
-      }
+      const { type, startX, startY } = drag.current;
+      const dxPx = (pos.x - startX) * c.width;
+      const dyPx = (pos.y - startY) * c.height;
 
-      const { handle, startX, startY, initFov } = drag.current;
-      const dx = pos.x - startX;
-      const dy = pos.y - startY;
-      let nf: FovState;
+      if (type === 'wl') {
+        state.setWL(plane, {
+          window: Math.max(1, drag.current.initW! + dxPx * 4),
+          level: drag.current.initL! - dyPx * 4,
+        });
+      } else if (type === 'pan') {
+        pan.current = { x: drag.current.initPanX! + dxPx, y: drag.current.initPanY! + dyPx };
+      } else if (type === 'fov') {
+        const { handle, initPlan } = drag.current;
+        if (!initPlan) return;
+        const store = useWorkstationStore.getState();
 
-      if (handle === 'move') {
-        nf = handleDragMove(dx, dy, initFov);
-      } else if (handle === 'rotate') {
-        nf = handleRotate(pos, startX, startY, initFov, c.width, c.height);
-      } else {
-        const ang = initFov.rot * Math.PI / 180;
-        const pdx = dx * c.width;
-        const pdy = dy * c.height;
-        const ldx = pdx * Math.cos(-ang) - pdy * Math.sin(-ang);
-        const ldy = pdx * Math.sin(-ang) + pdy * Math.cos(-ang);
-        nf = handleResize(handle, ldx, ldy, initFov, c.width, c.height, e.shiftKey, e.altKey);
-      }
-      
-      updateOrthogonalViews(targetPlane, nf);
-    } else {
-      const currentState = useWorkstationStore.getState();
-      const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
-      let targetPlane = plane;
-      if (seq) {
-        const lower = seq.name.toLowerCase();
-        if (lower.includes('axial')) targetPlane = 'axial';
-        else if (lower.includes('coronal')) targetPlane = 'coronal';
-        else if (lower.includes('sagittal')) targetPlane = 'sagittal';
-      }
-      const h = hitHandle(pos.x, pos.y, currentState.fov[targetPlane], c.width, c.height);
-      if (h) {
-        c.style.cursor = CURSOR_MAP[h] || 'default';
-      } else {
-        c.style.cursor = currentState.activeTool === 'pan' ? 'grab' : 'crosshair';
-      }
-    }
-  };
+        if (handle === 'move') {
+          // Move the 3D center
+          const d3 = unproject2Dto3D(dxPx / zoom.current, dyPx / zoom.current, plane, c.width, c.height);
+          store.setPlanning({
+            centerX: initPlan.centerX + d3.x,
+            centerY: initPlan.centerY + d3.y,
+            centerZ: initPlan.centerZ + d3.z,
+          });
+        } else if (handle === 'rotate') {
+          // Rotation: horizontal drag → rotation around the normal axis of the slice
+          const degPerPx = 180 / c.width;
+          const delta = dxPx * degPerPx;
+          if (plane === 'axial') {
+            store.setPlanning({ rotZ: (initPlan.rotZ + delta) % 360 });
+          } else if (plane === 'coronal') {
+            store.setPlanning({ rotY: (initPlan.rotY + delta) % 360 });
+          } else {
+            store.setPlanning({ rotX: (initPlan.rotX + delta) % 360 });
+          }
+        } else {
+          // Resize — handle specific edges/corners
+          const scaleMm = VIEW_FOV_MM / Math.min(c.width, c.height);
+          const dxMm = dxPx * scaleMm / zoom.current;
+          const dyMm = dyPx * scaleMm / zoom.current;
+          let newFovRead = initPlan.fovRead;
+          let newFovPhase = initPlan.fovPhase;
 
-  const onPointerUp = (e: React.PointerEvent) => {
-    e.preventDefault();
-    drag.current = null;
-    try { canvasRef.current?.releasePointerCapture(e.pointerId); } catch(err) {}
-  };
+          const isLeft   = handle === 'left'   || handle === 'tl' || handle === 'bl';
+          const isRight  = handle === 'right'  || handle === 'tr' || handle === 'br';
+          const isTop    = handle === 'top'    || handle === 'tl' || handle === 'tr';
+          const isBottom = handle === 'bottom' || handle === 'bl' || handle === 'br';
 
-  function onWheel(e: React.WheelEvent) {
-    e.preventDefault();
-    const d = e.deltaY > 0 ? -1 : 1;
-    if (e.ctrlKey) {
-      store.setParam('slices', Math.max(1, store.params.slices + d));
-      store.applyParams();
-      return;
-    }
-    if (e.altKey) {
-      store.setParam('thickness', Math.max(1, store.params.thickness + d * 0.5));
-      store.applyParams();
-      return;
-    }
-    // Zoom with Shift
-    if (e.shiftKey) { 
-      zoom.current = Math.max(0.5, Math.min(4, zoom.current + (e.deltaY > 0 ? -0.1 : 0.1))); 
-      return; 
-    }
-    store.setSlice(plane, store.slice[plane].cur + (e.deltaY > 0 ? 1 : -1));
-  }
+          // For FOV read: left edge dragged left increases width, right increases right
+          if (isLeft)   newFovRead = Math.max(20, initPlan.fovRead - dxMm * 2);
+          if (isRight)  newFovRead = Math.max(20, initPlan.fovRead + dxMm * 2);
+          if (isTop)    newFovPhase = Math.max(20, initPlan.fovPhase - dyMm * 2);
+          if (isBottom) newFovPhase = Math.max(20, initPlan.fovPhase + dyMm * 2);
 
-  function onDblClick(e: React.MouseEvent) {
-    const c = canvasRef.current;
-    if (c) {
-      const pos = { x:(e.clientX - c.getBoundingClientRect().left)/c.width, y:(e.clientY - c.getBoundingClientRect().top)/c.height };
-      const currentState = useWorkstationStore.getState();
-      const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
-      let targetPlane = plane;
-      if (seq) {
-        const lower = seq.name.toLowerCase();
-        if (lower.includes('axial')) targetPlane = 'axial';
-        else if (lower.includes('coronal')) targetPlane = 'coronal';
-        else if (lower.includes('sagittal')) targetPlane = 'sagittal';
-      }
-      if (targetPlane !== plane) {
-        const h = hitHandle(pos.x, pos.y, currentState.fov[targetPlane], c.width, c.height);
-        if (h === 'rotate' || h === 'move') {
-          updateOrthogonalViews(targetPlane, { ...currentState.fov[targetPlane], rot: 0 });
-          toast('FOV Rotation Reset', 'success');
-          return;
+          // Clamp to reasonable MRI FOV range
+          newFovRead  = Math.min(500, newFovRead);
+          newFovPhase = Math.min(500, newFovPhase);
+
+          store.setPlanning({ fovRead: newFovRead, fovPhase: newFovPhase });
         }
       }
+    } else {
+      // Hover: update cursor
+      if (!state.planningActive) { c.style.cursor = 'default'; return; }
+      
+      const targetPlane = getPlanningTargetPlane(state.planning);
+      if (targetPlane === plane) {
+        const handles = getFovHandles2D(state.planning, plane, c.width, c.height);
+        const hit = hitTestFov(pos.x * c.width, pos.y * c.height, handles);
+        c.style.cursor = hit ? (CURSOR_MAP[hit] || 'default') : 'default';
+      } else {
+        c.style.cursor = 'default';
+      }
     }
-    
-    store.resetViewport(plane);
-    zoom.current = 1;
-    toast(`${PLANE_LABEL[plane]} reset`, 'success');
-  }
+  }, [plane, getPos]);
 
-  function onDrop(e: React.DragEvent) {
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    drag.current = null;
+    try { canvasRef.current?.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (canvasRef.current) canvasRef.current.style.cursor = 'default';
+  }, []);
+
+  const onWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const d = e.deltaY > 0 ? -1 : 1;
+    const state = useWorkstationStore.getState();
+    if (!state.planningActive) return;
+
+    if (e.ctrlKey || e.metaKey) {
+      // FOV Read
+      state.setPlanning({ fovRead: Math.max(20, Math.min(500, state.planning.fovRead + d * 5)) });
+    } else if (e.shiftKey) {
+      // Slice Count
+      state.setPlanning({ sliceCount: Math.max(1, Math.min(200, state.planning.sliceCount + d)) });
+    } else if (e.altKey) {
+      // Slice Thickness
+      state.setPlanning({ sliceThickness: Math.max(0.5, Math.min(20, state.planning.sliceThickness + d * 0.5)) });
+    } else {
+      // Zoom
+      zoom.current = Math.max(0.3, Math.min(8, zoom.current * (e.deltaY > 0 ? 0.9 : 1.1)));
+    }
+  }, []);
+
+  const onDblClick = useCallback(() => {
+    zoom.current = 1;
+    pan.current = { x: 0, y: 0 };
+    toast(`${PLANE_LABEL[plane]} — Fit to screen`);
+  }, [plane]);
+
+  const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
     const file = e.dataTransfer.files[0];
     if (!file) return;
-    
+    const store = useWorkstationStore.getState();
+
+    const loadImage = (url: string) => {
+      store.setImageAll(url);
+      toast(`Loaded: ${file.name}`, 'success');
+    };
+
     if (file.type.startsWith('video/')) {
-      // For video, use ObjectURL for performance
-      const url = URL.createObjectURL(file) + '#video';
-      store.setImage(plane, url);
-      toast(`Video loaded in ${PLANE_LABEL[plane]}`, 'success');
+      loadImage(URL.createObjectURL(file));
     } else if (file.type.startsWith('image/')) {
       const reader = new FileReader();
-      reader.onload = ev => { store.setImage(plane, ev.target?.result as string); toast(`Loaded in ${PLANE_LABEL[plane]}`, 'success'); };
+      reader.onload = ev => loadImage(ev.target?.result as string);
       reader.readAsDataURL(file);
     }
-  }
-
-  // ─── RENDERING ──────────────────────────────────────────────────────────
-  
-  const renderPlanningBox = useCallback((ctx: CanvasRenderingContext2D, W: number, H: number, f: FovState) => {
-    const bx=f.x*W, by=f.y*H, bw=f.w*W, bh=f.h*H;
-    const cx=bx+bw/2, cy=by+bh/2;
-    const ang = f.rot * Math.PI / 180;
-    
-    ctx.save(); 
-    ctx.translate(cx, cy); 
-    ctx.rotate(ang);
-    
-    const hw=bw/2, hh=bh/2;
-    const isHoriz = bw > bh;
-    
-    ctx.strokeStyle = '#ffe040';
-    ctx.lineWidth = 1;
-    
-    // Fill
-    ctx.fillStyle = 'rgba(255, 224, 64, 0.15)';
-    ctx.fillRect(-hw, -hh, bw, bh);
-
-    // Draw slices (parallel lines inside)
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(34,197,94,0.9)'; // Green
-    
-    // We expect params to be passed to this function now, wait I need to add it to the args!
-    // Since I can't change the args signature without changing the callers in the same chunk easily,
-    // I will just read from the store directly here, as it's safe in the render loop.
-    const state = useWorkstationStore.getState();
-    const params = state.params;
-    const numSlices = params.slices || 1;
-    
-    const baseStep = isHoriz ? bh / Math.max(1, numSlices) : bw / Math.max(1, numSlices);
-    const step = baseStep * (params.thickness / 4) + (params.spacing || 0) * 2;
-    const totalExtent = (numSlices - 1) * step;
-    const startOffset = -totalExtent / 2;
-
-    if (isHoriz) {
-      for (let i=0; i<numSlices; i++) {
-        const y = startOffset + i*step;
-        ctx.moveTo(-hw, y); ctx.lineTo(hw, y);
-      }
-    } else {
-      for (let i=0; i<numSlices; i++) {
-        const x = startOffset + i*step;
-        ctx.moveTo(x, -hh); ctx.lineTo(x, hh);
-      }
-    }
-    ctx.stroke();
-
-    // Box outline
-    ctx.strokeRect(-hw, -hh, bw, bh);
-
-    // Center infinite line
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255,224,64,0.6)';
-    ctx.lineWidth = 1;
-    if (isHoriz) {
-      ctx.moveTo(-W*2, 0); ctx.lineTo(W*2, 0);
-    } else {
-      ctx.moveTo(0, -H*2); ctx.lineTo(0, H*2);
-    }
-    ctx.stroke();
-
-    // Center circle (like Siemens target)
-    ctx.beginPath();
-    ctx.strokeStyle = '#ffe040';
-    ctx.lineWidth = 1.5;
-    ctx.arc(0, 0, 8, 0, Math.PI*2);
-    ctx.stroke();
-
-    // Siemens text
-    ctx.fillStyle = '#ffe040';
-    ctx.font = '10px sans-serif';
-    ctx.fillText(`FOV ${Math.round(bw)}`, hw + 5, hh + 10);
-    if (Math.abs(f.rot) > 0.5) {
-      // Normalize angle for display (-180 to 180)
-      let displayRot = f.rot % 360;
-      if (displayRot > 180) displayRot -= 360;
-      if (displayRot < -180) displayRot += 360;
-      ctx.fillText(`Ang ${Math.round(displayRot)}°`, hw + 5, hh + 22);
-    }
-    
-    // Draw tiny handles
-    const handles:[number,number][]=[[-hw,-hh],[0,-hh],[hw,-hh],[hw,0],[hw,hh],[0,hh],[-hw,hh],[-hw,0]];
-    ctx.fillStyle='#ffe040';
-    handles.forEach(([hx,hy])=>{
-      ctx.fillRect(hx-3,hy-3,6,6);
-    });
-    
-    // Rotation handle
-    const rhy=-hh-20;
-    ctx.beginPath(); ctx.moveTo(0,-hh); ctx.lineTo(0,rhy); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0,rhy,4,0,Math.PI*2); ctx.fill();
-    
-    ctx.restore();
   }, []);
 
-  const renderCanvas = useCallback(() => {
-    const c = canvasRef.current; if (!c) return;
-    const ctx = c.getContext('2d'); if (!ctx) return;
-    const W = c.width, H = c.height;
-    
-    // Always get the latest state directly from the store to avoid stale closures in the RAF loop
-    const state = useWorkstationStore.getState();
-    const { fov, xhair, slice, scan, show, sequences, selectedSeqId, wl } = state;
-    
-    const seq = sequences.find(s => s.id === selectedSeqId);
-    let targetPlane = plane;
-    if (seq) {
-      const lower = seq.name.toLowerCase();
-      if (lower.includes('axial')) targetPlane = 'axial';
-      else if (lower.includes('coronal')) targetPlane = 'coronal';
-      else if (lower.includes('sagittal')) targetPlane = 'sagittal';
+  // ── Keyboard Shortcuts ────────────────────────────────────
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (useWorkstationStore.getState().activeVP !== plane) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) return;
+
+      const store = useWorkstationStore.getState();
+
+      switch (e.key) {
+        case 'r': case 'R':
+          store.resetPlanning();
+          break;
+        case 'f': case 'F':
+          zoom.current = 1; pan.current = { x: 0, y: 0 };
+          toast('Fit to screen');
+          break;
+        case '0':
+          zoom.current = 1; toast('Zoom reset');
+          break;
+        case 'Delete':
+          zoom.current = 1; pan.current = { x: 0, y: 0 };
+          store.resetViewport(plane);
+          break;
+        case 'ArrowUp':
+        case 'ArrowDown':
+        case 'ArrowLeft':
+        case 'ArrowRight': {
+          e.preventDefault();
+          const c = canvasRef.current!;
+          const step = e.shiftKey ? 10 : 1;
+          let dx = 0, dy = 0;
+          if (e.key === 'ArrowLeft')  dx = -step;
+          if (e.key === 'ArrowRight') dx =  step;
+          if (e.key === 'ArrowUp')    dy = -step;
+          if (e.key === 'ArrowDown')  dy =  step;
+          const d3 = unproject2Dto3D(dx, dy, plane, c.width, c.height);
+          const p = store.planning;
+          store.setPlanning({ centerX: p.centerX + d3.x, centerY: p.centerY + d3.y, centerZ: p.centerZ + d3.z });
+          break;
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [plane]);
+
+  // ── Rendering ─────────────────────────────────────────────
+
+  const renderGrid = useCallback((ctx: CanvasRenderingContext2D, W: number, H: number, isDark: boolean) => {
+    const gridColor = isDark ? '#0d1e30' : '#d0dae8';
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 0.5;
+    const gridSize = 30;
+    for (let x = 0; x <= W; x += gridSize) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     }
-    const isTarget = targetPlane === plane;
-    
-    const sl = slice[plane];
-    const w = wl[plane];
+    for (let y = 0; y <= H; y += gridSize) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+  }, []);
+
+  const renderEmptyState = useCallback((
+    ctx: CanvasRenderingContext2D, W: number, H: number, isDark: boolean
+  ) => {
+    // Background
+    ctx.fillStyle = isDark ? '#06090f' : '#f0f4fa';
+    ctx.fillRect(0, 0, W, H);
+
+    // Planning grid
+    renderGrid(ctx, W, H, isDark);
+
+    // Plane label (large, centered)
+    ctx.font = 'bold 13px Roboto Mono, monospace';
+    ctx.fillStyle = PLANE_COLOR[plane];
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(PLANE_LABEL[plane], 6, 5);
+  }, [plane, renderGrid]);
+
+  const renderFovBox = useCallback((
+    ctx: CanvasRenderingContext2D,
+    W: number, H: number,
+    plan: PlanningObject,
+    isActive: boolean,
+  ) => {
+    if (isActive) {
+      // ── Active planning viewport: full FOV rectangle + handles ──
+      const handles = getFovHandles2D(plan, plane, W, H);
+
+      // Semi-transparent fill
+      ctx.beginPath();
+      ctx.moveTo(handles.tl.x, handles.tl.y);
+      ctx.lineTo(handles.tr.x, handles.tr.y);
+      ctx.lineTo(handles.br.x, handles.br.y);
+      ctx.lineTo(handles.bl.x, handles.bl.y);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255, 224, 64, 0.1)';
+      ctx.fill();
+
+      // Outline
+      ctx.strokeStyle = '#ffe040';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([]);
+      ctx.stroke();
+
+      // Crosshair at center
+      const cx = handles.center.x, cy = handles.center.y;
+      const cSize = 12;
+      ctx.strokeStyle = 'rgba(255,224,64,0.8)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx - cSize, cy); ctx.lineTo(cx + cSize, cy);
+      ctx.moveTo(cx, cy - cSize); ctx.lineTo(cx, cy + cSize);
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.stroke();
+
+      // Corner handles (filled squares)
+      ctx.fillStyle = '#ffe040';
+      const hs = 5;
+      [handles.tl, handles.tr, handles.br, handles.bl].forEach(h => {
+        ctx.fillRect(h.x - hs, h.y - hs, hs * 2, hs * 2);
+      });
+
+      // Edge handles (hollow circles)
+      ctx.strokeStyle = '#ffe040';
+      ctx.lineWidth = 1.5;
+      [handles.top, handles.bottom, handles.left, handles.right].forEach(h => {
+        ctx.beginPath(); ctx.arc(h.x, h.y, hs - 1, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,224,64,0.5)';
+        ctx.fill();
+      });
+
+      // Rotation handle: line + circle
+      ctx.strokeStyle = 'rgba(255,224,64,0.7)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(handles.top.x, handles.top.y);
+      ctx.lineTo(handles.rot.x, handles.rot.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#ffe040';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(handles.rot.x, handles.rot.y, 5, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+
+      // FOV label
+      ctx.fillStyle = 'rgba(255,224,64,0.8)';
+      ctx.font = '9px Roboto Mono, monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${Math.round(plan.fovRead)}×${Math.round(plan.fovPhase)}mm`, handles.br.x + 5, handles.br.y + 4);
+
+    } else {
+      // ── Projected viewport: slice lines only, no rectangle ──
+      const lines = projectSliceLines(plan, plane, W, H);
+      ctx.lineWidth = 0.8;
+      for (const line of lines) {
+        ctx.strokeStyle = line.isCenter
+          ? 'rgba(255, 183, 0, 0.9)'      // center slice highlighted
+          : 'rgba(34, 197, 94, 0.65)';   // other slices green
+        ctx.lineWidth = line.isCenter ? 1.5 : 0.8;
+        ctx.beginPath();
+        ctx.moveTo(line.p1.x, line.p1.y);
+        ctx.lineTo(line.p2.x, line.p2.y);
+        ctx.stroke();
+      }
+    }
+  }, [plane]);
+
+  const renderCanvas = useCallback(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    const W = c.width, H = c.height;
+
+    const state = useWorkstationStore.getState();
+    const { planning, planningActive, wl, show, scan, sequences, selectedSeqId, debugMode, theme } = state;
+    const isDark = theme !== 'light';
 
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
 
-    // Draw image
+    // ── Empty state (no image loaded) ──
+    if (!planningActive) {
+      renderEmptyState(ctx, W, H, isDark);
+
+      if (show.labels) {
+        const o = ORIENT[plane];
+        ctx.font = 'bold 11px Roboto Mono, monospace';
+        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(o.top, W / 2, 6);
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(o.bottom, W / 2, H - 6);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(o.left, 5, H / 2);
+        ctx.textAlign = 'right';
+        ctx.fillText(o.right, W - 5, H / 2);
+      }
+
+      // "Load image" hint
+      ctx.font = '10px Roboto Mono, monospace';
+      ctx.fillStyle = isDark ? '#1e3a5f' : '#8ba4c0';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('Drop an MRI image here or use Import MRI', W / 2, H / 2 + 28);
+      return;
+    }
+
+    // ── Active state (image loaded) ──
+    const w = wl[plane];
     const img = imgRef.current;
+
+    // Background
+    ctx.fillStyle = isDark ? '#06090f' : '#e8ecf2';
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw image with pan/zoom and W/L
     if (img) {
-      const t = sl.max > 1 ? (sl.cur - 1) / (sl.max - 1) : 0.5;
-      
       let imgW = 0, imgH = 0;
       if (img instanceof HTMLVideoElement) {
-        if (!isNaN(img.duration) && img.duration > 0) img.currentTime = t * img.duration;
+        const sl = state.wl[plane]; // use wl as proxy for slice
+        if (!isNaN(img.duration) && img.duration > 0) img.currentTime = 0.5 * img.duration;
         imgW = img.videoWidth; imgH = img.videoHeight;
       } else {
         imgW = img.width; imgH = img.height;
       }
-      
-      const bri = w.brightness.toFixed(2);
-      const con = w.contrast.toFixed(2);
-      ctx.filter = `brightness(${bri}) contrast(${con})`;
-      ctx.save();
-      const zf = zoom.current;
-      const cx = W / 2, cy = H / 2;
-      ctx.translate(cx, cy); ctx.scale(zf, zf); ctx.translate(-cx, -cy);
-      if (imgW > 0 && imgH > 0) ctx.drawImage(img, 0, 0, imgW, imgH, 0, 0, W, H);
-      ctx.restore();
-      ctx.filter = 'none';
-      // Vignette
-      const grad = ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.8);
-      grad.addColorStop(0,'transparent'); grad.addColorStop(1,'rgba(0,0,0,0.4)');
-      ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
+
+      if (imgW > 0 && imgH > 0) {
+        const bri = w.brightness.toFixed(2);
+        const con = w.contrast.toFixed(2);
+        ctx.filter = `brightness(${bri}) contrast(${con})`;
+        ctx.save();
+        const zf = zoom.current;
+        const pcx = W / 2 + pan.current.x;
+        const pcy = H / 2 + pan.current.y;
+        ctx.translate(pcx, pcy);
+        ctx.scale(zf, zf);
+        ctx.translate(-pcx, -pcy);
+
+        // Fit image to viewport maintaining aspect ratio
+        const scale = Math.min(W / imgW, H / imgH);
+        const dw = imgW * scale;
+        const dh = imgH * scale;
+        const dx = (W - dw) / 2;
+        const dy = (H - dh) / 2;
+        ctx.drawImage(img, dx, dy, dw, dh);
+
+        ctx.restore();
+        ctx.filter = 'none';
+
+        // Subtle vignette
+        const grad = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.75);
+        grad.addColorStop(0, 'transparent');
+        grad.addColorStop(1, isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.08)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, H);
+      }
     } else {
-      // Placeholder grid
-      ctx.strokeStyle = '#0f1e30'; ctx.lineWidth = 1;
-      for (let x=0;x<=W;x+=30) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-      for (let y=0;y<=H;y+=30) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-      ctx.fillStyle = '#1e3a5f'; ctx.font = 'bold 14px Roboto Mono, monospace';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(PLANE_LABEL[plane], W/2, H/2 - 12);
-      ctx.font = '10px Roboto Mono, monospace'; ctx.fillStyle = '#1e293b';
-      ctx.fillText('Drop an MRI image here', W/2, H/2 + 10);
+      // Image still loading: show grid
+      renderGrid(ctx, W, H, isDark);
     }
 
+    // ── Orientation labels ──
     if (show.labels) {
       const o = ORIENT[plane];
       ctx.font = 'bold 11px Roboto Mono, monospace';
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.shadowColor = '#000'; ctx.shadowBlur = 3;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';    ctx.fillText(o.top, W/2, 6);
-      ctx.textBaseline = 'bottom'; ctx.fillText(o.bottom, W/2, H-6);
-      ctx.textAlign = 'left';      ctx.textBaseline = 'middle'; ctx.fillText(o.left, 5, H/2);
-      ctx.textAlign = 'right';     ctx.fillText(o.right, W-5, H/2);
+      ctx.fillStyle = isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)';
+      ctx.shadowColor = isDark ? '#000' : '#fff'; ctx.shadowBlur = 3;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(o.top, W / 2, 6);
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(o.bottom, W / 2, H - 6);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(o.left, 5, H / 2);
+      ctx.textAlign = 'right';
+      ctx.fillText(o.right, W - 5, H / 2);
       ctx.shadowBlur = 0;
     }
 
-    if (show.xhair) {
-      const ch = xhair[plane];
-      const cx = ch.x * W, cy = ch.y * H;
-      ctx.save(); ctx.strokeStyle = 'rgba(0,212,255,0.65)'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
-      ctx.beginPath(); ctx.moveTo(0,cy); ctx.lineTo(W,cy); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx,0); ctx.lineTo(cx,H); ctx.stroke();
-      ctx.setLineDash([]); ctx.strokeStyle = 'rgba(0,220,255,0.9)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2); ctx.stroke();
-      ctx.restore();
-    }
-
+    // ── FOV and Slice Projection ──
     if (show.fov) {
-      if (isTarget) {
-        ctx.strokeStyle = '#ffe040';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(0, 0, W, H);
-      }
-      // Draw FOV on all planes
-      renderPlanningBox(ctx, W, H, fov[targetPlane]);
+      const targetPlane = getPlanningTargetPlane(planning);
+      const isTarget = targetPlane === plane;
+      renderFovBox(ctx, W, H, planning, isTarget);
     }
 
-    if (show.sliceMarkers && sl.max > 1) {
-      const spacing = H / sl.max;
-      ctx.strokeStyle = 'rgba(0,155,222,0.15)'; ctx.lineWidth = 0.5;
-      for (let i=0;i<=sl.max;i++) { const y=i*spacing; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-      const curY = (sl.cur - 1) * spacing;
-      ctx.fillStyle = 'rgba(0,155,222,0.1)'; ctx.fillRect(0,curY,W,spacing);
-      ctx.strokeStyle = 'rgba(0,155,222,0.5)'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(0,curY); ctx.lineTo(W,curY); ctx.stroke();
-    }
-
+    // ── Scan progress sweep line ──
     if (scan.running && !scan.paused) {
       const sweepY = (scan.progress / 100) * H;
-      const g = ctx.createLinearGradient(0,sweepY-8,0,sweepY+8);
-      g.addColorStop(0,'transparent'); g.addColorStop(0.5,'rgba(34,197,94,0.8)'); g.addColorStop(1,'transparent');
-      ctx.fillStyle = g; ctx.fillRect(0, sweepY-8, W, 16);
+      const g = ctx.createLinearGradient(0, sweepY - 8, 0, sweepY + 8);
+      g.addColorStop(0, 'transparent');
+      g.addColorStop(0.5, 'rgba(34,197,94,0.8)');
+      g.addColorStop(1, 'transparent');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, sweepY - 8, W, 16);
       ctx.fillStyle = 'rgba(34,197,94,0.04)';
-      ctx.fillRect(0,0,W,sweepY);
+      ctx.fillRect(0, 0, W, sweepY);
     }
 
-    ctx.font = 'bold 9.5px Roboto Mono, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    // ── Plane ID label + Sequence info ──
+    const seq = sequences.find(s => s.id === selectedSeqId);
+    ctx.font = 'bold 9.5px Roboto Mono, monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillStyle = PLANE_COLOR[plane];
     ctx.fillText(PLANE_LABEL[plane], 6, 5);
     if (seq) {
-      ctx.fillStyle = 'rgba(100,116,139,0.6)'; ctx.font = '8px Roboto Mono, monospace';
-      ctx.fillText(seq.name.slice(0,22), 34, 6);
+      ctx.fillStyle = 'rgba(100,116,139,0.7)';
+      ctx.font = '8px Roboto Mono, monospace';
+      ctx.fillText(seq.name.slice(0, 22), 34, 6);
     }
     ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(100,116,139,0.55)';
-    ctx.fillText(`TR${seq?.tr??''} TE${seq?.te??''} ${state.params.thickness}mm`, W-5, 5);
+    ctx.fillStyle = 'rgba(100,116,139,0.6)';
+    ctx.fillText(
+      `TR${seq?.tr ?? '—'} TE${seq?.te ?? '—'} | ${planning.sliceThickness}mm × ${planning.sliceCount}sl`,
+      W - 5, 5
+    );
+
+    // Bottom-left: Slice info
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'left';
-    ctx.fillText(`${sl.cur}/${sl.max}`, 6, H-5);
+    ctx.fillText(
+      `FOV ${Math.round(planning.fovRead)}×${Math.round(planning.fovPhase)} mm`,
+      6, H - 5
+    );
     ctx.textAlign = 'right';
-    ctx.fillText(state.params.position, W-5, H-5);
-  }, [plane, renderPlanningBox]);
+    ctx.fillText(
+      `R${planning.rotX.toFixed(0)}° / ${planning.rotY.toFixed(0)}° / ${planning.rotZ.toFixed(0)}°`,
+      W - 5, H - 5
+    );
+
+    // ── Debug overlay ──
+    if (debugMode) {
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.fillRect(5, 20, 200, 130);
+      ctx.fillStyle = '#00ff88';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      const dl = [
+        `Target: ${getPlanningTargetPlane(planning)}  VP: ${plane}`,
+        `Center: X${planning.centerX.toFixed(1)} Y${planning.centerY.toFixed(1)} Z${planning.centerZ.toFixed(1)}`,
+        `Rot:  P${planning.rotX.toFixed(1)} Y${planning.rotY.toFixed(1)} R${planning.rotZ.toFixed(1)}`,
+        `FOV:  ${planning.fovRead.toFixed(0)}×${planning.fovPhase.toFixed(0)} mm`,
+        `Slices: ${planning.sliceCount} × ${planning.sliceThickness}mm`,
+        `Gap:  ${planning.sliceGap}mm`,
+        `Zoom: ${zoom.current.toFixed(2)}x  Pan: ${pan.current.x.toFixed(0)},${pan.current.y.toFixed(0)}`,
+      ];
+      dl.forEach((l, i) => ctx.fillText(l, 10, 25 + i * 14));
+    }
+  }, [plane, renderEmptyState, renderGrid, renderFovBox]);
+
+  // ── RAF loop ──────────────────────────────────────────────
 
   useEffect(() => {
-    let running = true;
-    const loop = () => { if (!running) return; renderCanvas(); rafRef.current = requestAnimationFrame(loop); };
+    let alive = true;
+    const loop = () => { if (!alive) return; renderCanvas(); rafRef.current = requestAnimationFrame(loop); };
     rafRef.current = requestAnimationFrame(loop);
-    return () => { running = false; cancelAnimationFrame(rafRef.current); };
+    return () => { alive = false; cancelAnimationFrame(rafRef.current); };
   }, [renderCanvas]);
 
-  useEffect(() => {
-    const kd = (e: KeyboardEvent) => {
-      if (['INPUT','SELECT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
-      if (e.code === 'Space') { spacePressedRef.current = true; }
-      if (e.key === 'Delete' && store.activeVP === plane) store.resetViewport(plane);
-      
-      // Nudge FOV
-      if (e.key.startsWith('Arrow')) {
-        const currentState = useWorkstationStore.getState();
-        if (currentState.activeVP !== plane) return; // Only process on active viewport
-        
-        const seq = currentState.sequences.find(s => s.id === currentState.selectedSeqId);
-        let targetPlane = plane;
-        if (seq) {
-          const lower = seq.name.toLowerCase();
-          if (lower.includes('axial')) targetPlane = 'axial';
-          else if (lower.includes('coronal')) targetPlane = 'coronal';
-          else if (lower.includes('sagittal')) targetPlane = 'sagittal';
-        }
-        
-        const step = e.shiftKey ? 10 : 1;
-        let dx = 0, dy = 0;
-        if (e.key === 'ArrowUp') dy = -step;
-        if (e.key === 'ArrowDown') dy = step;
-        if (e.key === 'ArrowLeft') dx = -step;
-        if (e.key === 'ArrowRight') dx = step;
-        
-        if (dx !== 0 || dy !== 0) {
-          e.preventDefault();
-          const f = currentState.fov[targetPlane];
-          const c = canvasRef.current;
-          if (c) {
-             const ndx = dx / c.width;
-             const ndy = dy / c.height;
-             let nx = f.x + ndx;
-             let ny = f.y + ndy;
-             const cx = nx + f.w / 2;
-             const cy = ny + f.h / 2;
-             if (cx < 0.05) nx += (0.05 - cx);
-             if (cx > 0.95) nx -= (cx - 0.95);
-             if (cy < 0.05) ny += (0.05 - cy);
-             if (cy > 0.95) ny -= (cy - 0.95);
-             
-             updateOrthogonalViews(targetPlane, { ...f, x: nx, y: ny });
-          }
-        }
-      }
-    };
-    const ku = (e: KeyboardEvent) => { if (e.code === 'Space') spacePressedRef.current = false; };
-    window.addEventListener('keydown', kd, { passive: false });
-    window.addEventListener('keyup', ku);
-    return () => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); };
-  }, [plane]);
+  // ── Render ────────────────────────────────────────────────
 
   return (
     <div
       ref={wrapRef}
-      style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: '#000' }}
+      style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: '#06090f' }}
       onContextMenu={e => e.preventDefault()}
       onDragOver={e => { e.preventDefault(); (e.currentTarget as HTMLElement).classList.add('drag-over'); }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) (e.currentTarget as HTMLElement).classList.remove('drag-over'); }}
@@ -691,14 +688,13 @@ export default function MRIViewport({ plane }: Props) {
     >
       <canvas
         ref={canvasRef}
-        className="vp-canvas"
-        onPointerDown={startDrag}
+        onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onWheel={onWheel}
         onDoubleClick={onDblClick}
-        style={{ width:'100%', height:'100%', display:'block', touchAction:'none' }}
+        style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
       />
     </div>
   );
