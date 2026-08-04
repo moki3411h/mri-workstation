@@ -403,85 +403,95 @@ export default function MRIViewport({ plane }: Props) {
       // ── Active planning viewport: full FOV rectangle + handles ──
       const handles = getFovHandles2D(plan, plane, W, H);
 
-      // Semi-transparent fill
+      // Outline (No fill)
       ctx.beginPath();
       ctx.moveTo(handles.tl.x, handles.tl.y);
       ctx.lineTo(handles.tr.x, handles.tr.y);
       ctx.lineTo(handles.br.x, handles.br.y);
       ctx.lineTo(handles.bl.x, handles.bl.y);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(255, 224, 64, 0.1)';
-      ctx.fill();
-
-      // Outline
-      ctx.strokeStyle = '#ffe040';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 1;
       ctx.setLineDash([]);
       ctx.stroke();
 
       // Crosshair at center
       const cx = handles.center.x, cy = handles.center.y;
-      const cSize = 12;
-      ctx.strokeStyle = 'rgba(255,224,64,0.8)';
+      const cSize = 4;
+      ctx.strokeStyle = '#ffff00';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(cx - cSize, cy); ctx.lineTo(cx + cSize, cy);
       ctx.moveTo(cx, cy - cSize); ctx.lineTo(cx, cy + cSize);
       ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.stroke();
 
-      // Corner handles (filled squares)
-      ctx.fillStyle = '#ffe040';
-      const hs = 5;
-      [handles.tl, handles.tr, handles.br, handles.bl].forEach(h => {
-        ctx.fillRect(h.x - hs, h.y - hs, hs * 2, hs * 2);
-      });
-
-      // Edge handles (hollow circles)
-      ctx.strokeStyle = '#ffe040';
-      ctx.lineWidth = 1.5;
-      [handles.top, handles.bottom, handles.left, handles.right].forEach(h => {
-        ctx.beginPath(); ctx.arc(h.x, h.y, hs - 1, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = 'rgba(255,224,64,0.5)';
-        ctx.fill();
-      });
-
-      // Rotation handle: line + circle
-      ctx.strokeStyle = 'rgba(255,224,64,0.7)';
+      // 8 Handles (Hollow squares)
+      const hs = 3; // Half-size (so 6x6 total)
+      ctx.strokeStyle = '#ffff00';
       ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.moveTo(handles.top.x, handles.top.y);
-      ctx.lineTo(handles.rot.x, handles.rot.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = '#ffe040';
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(handles.rot.x, handles.rot.y, 5, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
+      const allHandles = [
+        handles.tl, handles.tr, handles.br, handles.bl,
+        handles.top, handles.bottom, handles.left, handles.right
+      ];
+      allHandles.forEach(h => {
+        // We draw hollow squares. Using clearRect to ensure background image shows through isn't strictly necessary 
+        // since we just stroke it, but strokeRect is perfect.
+        ctx.strokeRect(h.x - hs, h.y - hs, hs * 2, hs * 2);
+      });
 
-      // FOV label
-      ctx.fillStyle = 'rgba(255,224,64,0.8)';
-      ctx.font = '9px Roboto Mono, monospace';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText(`${Math.round(plan.fovRead)}×${Math.round(plan.fovPhase)}mm`, handles.br.x + 5, handles.br.y + 4);
+      // Phase Arrow (indicating Phase Encoding Direction)
+      // Reference image has an arrow on the right edge pointing in Phase direction (typically A->P which is down)
+      // Vector from top to bottom handle represents phase direction.
+      const dx = handles.bottom.x - handles.top.x;
+      const dy = handles.bottom.y - handles.top.y;
+      const len = Math.hypot(dx, dy);
+      if (len > 0) {
+        const nx = dx / len;
+        const ny = dy / len;
+        
+        // Arrow starts from the right handle, pointing "down" along the phase vector
+        const startX = handles.right.x;
+        const startY = handles.right.y;
+        const arrowLen = 18;
+        const endX = startX + nx * arrowLen;
+        const endY = startY + ny * arrowLen;
+
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        // Arrow head (V shape)
+        const headLen = 5;
+        const angle = Math.atan2(ny, nx);
+        ctx.beginPath();
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI/6), endY - headLen * Math.sin(angle - Math.PI/6));
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI/6), endY - headLen * Math.sin(angle + Math.PI/6));
+        ctx.stroke();
+      }
 
     } else {
       // ── Projected viewport: slice lines only, no rectangle ──
       const lines = projectSliceLines(plan, plane, W, H);
-      ctx.lineWidth = 0.8;
+      
       for (const line of lines) {
-        ctx.strokeStyle = line.isCenter
-          ? 'rgba(255, 183, 0, 0.9)'      // center slice highlighted
-          : 'rgba(34, 197, 94, 0.65)';   // other slices green
-        ctx.lineWidth = line.isCenter ? 1.5 : 0.8;
+        ctx.strokeStyle = '#ffff00'; // All slice lines are yellow in Siemens reference
+        ctx.lineWidth = 1;
+        
+        if (line.style === 'dashed') {
+          ctx.setLineDash([5, 5]);
+        } else {
+          ctx.setLineDash([]);
+        }
+
         ctx.beginPath();
         ctx.moveTo(line.p1.x, line.p1.y);
         ctx.lineTo(line.p2.x, line.p2.y);
         ctx.stroke();
       }
+      ctx.setLineDash([]); // Reset
     }
   }, [plane]);
 

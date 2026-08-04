@@ -246,7 +246,7 @@ export function hitTestFov(px: number, py: number, handles: Handles2D): string |
 export interface SliceLine {
   p1: Point2D;
   p2: Point2D;
-  isCenter: boolean;
+  style: 'solid' | 'dashed' | 'bound';
 }
 
 /**
@@ -260,45 +260,78 @@ export interface SliceLine {
  */
 export function projectSliceLines(plan: PlanningObject, plane: Plane, W: number, H: number): SliceLine[] {
   const sliceCenters = getSliceCenters3D(plan);
-  const normal = getSliceNormal(plan);
-  const corners = getFovCorners3D(plan);
+  if (sliceCenters.length === 0) return [];
+
   const fovWidth = plan.fovRead;
   const hw = fovWidth / 2;
+  const overextendHw = hw * 1.1; // Siemens slice lines extend slightly past the bounds
+
+  let readDir: Point3D;
+  if (plan.orientation === 'axial') {
+    readDir = { x: 1, y: 0, z: 0 };
+  } else if (plan.orientation === 'coronal') {
+    readDir = { x: 1, y: 0, z: 0 };
+  } else {
+    readDir = { x: 0, y: 1, z: 0 };
+  }
+  const rotatedReadDir = applyPlanningRotation(readDir, plan);
+
+  const getSliceEdgePoints = (sc: Point3D, halfWidth: number) => {
+    return {
+      p1: {
+        x: sc.x - rotatedReadDir.x * halfWidth,
+        y: sc.y - rotatedReadDir.y * halfWidth,
+        z: sc.z - rotatedReadDir.z * halfWidth,
+      },
+      p2: {
+        x: sc.x + rotatedReadDir.x * halfWidth,
+        y: sc.y + rotatedReadDir.y * halfWidth,
+        z: sc.z + rotatedReadDir.z * halfWidth,
+      }
+    };
+  };
+
   const lines: SliceLine[] = [];
-  const centerIdx = Math.floor(plan.sliceCount / 2);
 
-  for (let i = 0; i < sliceCenters.length; i++) {
-    const sc = sliceCenters[i]!;
+  // 1. First slice (Top bound)
+  const firstCenters = getSliceEdgePoints(sliceCenters[0]!, overextendHw);
+  lines.push({
+    p1: project3Dto2D(firstCenters.p1, plane, W, H),
+    p2: project3Dto2D(firstCenters.p2, plane, W, H),
+    style: 'solid'
+  });
 
-    // Get two points on the slice plane's edge (using FOV read direction)
-    // The "read" direction is perpendicular to normal in the FOV plane
-    let readDir: Point3D;
-    if (plan.orientation === 'axial') {
-      readDir = { x: 1, y: 0, z: 0 };
-    } else if (plan.orientation === 'coronal') {
-      readDir = { x: 1, y: 0, z: 0 };
-    } else {
-      readDir = { x: 0, y: 1, z: 0 };
-    }
-
-    // Apply the same rotation as the planning object
-    const rotatedReadDir = applyPlanningRotation(readDir, plan);
-
-    const p1_3d: Point3D = {
-      x: sc.x - rotatedReadDir.x * hw * 1.2,
-      y: sc.y - rotatedReadDir.y * hw * 1.2,
-      z: sc.z - rotatedReadDir.z * hw * 1.2,
-    };
-    const p2_3d: Point3D = {
-      x: sc.x + rotatedReadDir.x * hw * 1.2,
-      y: sc.y + rotatedReadDir.y * hw * 1.2,
-      z: sc.z + rotatedReadDir.z * hw * 1.2,
-    };
-
+  // 2. Last slice (Bottom bound)
+  if (sliceCenters.length > 1) {
+    const lastCenters = getSliceEdgePoints(sliceCenters[sliceCenters.length - 1]!, overextendHw);
     lines.push({
-      p1: project3Dto2D(p1_3d, plane, W, H),
-      p2: project3Dto2D(p2_3d, plane, W, H),
-      isCenter: i === centerIdx,
+      p1: project3Dto2D(lastCenters.p1, plane, W, H),
+      p2: project3Dto2D(lastCenters.p2, plane, W, H),
+      style: 'solid'
+    });
+
+    // 3. Center slice (Dashed)
+    const midIdx = Math.floor(sliceCenters.length / 2);
+    const midCenters = getSliceEdgePoints(sliceCenters[midIdx]!, overextendHw);
+    lines.push({
+      p1: project3Dto2D(midCenters.p1, plane, W, H),
+      p2: project3Dto2D(midCenters.p2, plane, W, H),
+      style: 'dashed'
+    });
+
+    // 4. Vertical FoV bounds (connecting first and last slice at exactly 'hw' distance)
+    const boundFirst = getSliceEdgePoints(sliceCenters[0]!, hw);
+    const boundLast = getSliceEdgePoints(sliceCenters[sliceCenters.length - 1]!, hw);
+    
+    lines.push({
+      p1: project3Dto2D(boundFirst.p1, plane, W, H),
+      p2: project3Dto2D(boundLast.p1, plane, W, H),
+      style: 'bound'
+    });
+    lines.push({
+      p1: project3Dto2D(boundFirst.p2, plane, W, H),
+      p2: project3Dto2D(boundLast.p2, plane, W, H),
+      style: 'bound'
     });
   }
 
