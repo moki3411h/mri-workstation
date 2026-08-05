@@ -10,7 +10,8 @@ import {
   axisAngleToMatrix, multiplyMatrices, matrixToEuler,
 } from '@/lib/geometry';
 import { toast } from '@/lib/toast';
-import { FOVPlanningBox } from './FOVPlanningBox';
+import FOVPlanningBox, { type Point } from './FOVPlanningBox';
+import { useFOVBoxController } from './useFOVBoxController';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -44,6 +45,82 @@ interface DragState {
 }
 
 interface Props { plane: Plane; }
+
+// ── FOV Overlay Component ─────────────────────────────────
+
+function FOVOverlay({ plane, size }: { plane: Plane, size: { w: number, h: number } }) {
+  const images = useWorkstationStore(s => s.images);
+  const hasImage = !!images[plane];
+
+  const hw = 75;
+  const cx = size.w / 2;
+  const cy = size.h / 2;
+
+  const initialCorners: [Point, Point, Point, Point] = [
+    { x: cx - hw, y: cy - hw }, // tl
+    { x: cx + hw, y: cy - hw }, // tr
+    { x: cx - hw, y: cy + hw }, // bl
+    { x: cx + hw, y: cy + hw }, // br
+  ];
+
+  const axiBox = useFOVBoxController(initialCorners, 'br');
+  const corBox = useFOVBoxController(initialCorners, 'bl');
+  const sagBox1 = useFOVBoxController(initialCorners, 'none');
+  const sagBox2 = useFOVBoxController([
+    { x: cx - hw, y: cy - hw + 30 },
+    { x: cx + hw, y: cy - hw + 30 },
+    { x: cx - hw, y: cy + hw - 30 },
+    { x: cx + hw, y: cy + hw - 30 },
+  ], 'none');
+
+  if (!hasImage) return null;
+
+  if (plane === 'axial') {
+    return (
+      <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }} {...axiBox.svgRootProps}>
+        <FOVPlanningBox
+          corners={axiBox.corners}
+          hasImage={hasImage}
+          lineStyle="dashed"
+          showReferenceLine={true}
+          referenceLineT={0.55}
+          rotateHandleAt="br"
+          onBodyPointerDown={axiBox.handlers.onBodyPointerDown}
+          onRotateHandlePointerDown={axiBox.handlers.onRotateHandlePointerDown}
+        />
+      </svg>
+    );
+  }
+
+  if (plane === 'coronal') {
+    return (
+      <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }} {...corBox.svgRootProps}>
+        <FOVPlanningBox
+          corners={corBox.corners}
+          hasImage={hasImage}
+          lineStyle="solid"
+          showReferenceLine={true}
+          referenceLineT={0.9}
+          rotateHandleAt="bl"
+          onBodyPointerDown={corBox.handlers.onBodyPointerDown}
+          onRotateHandlePointerDown={corBox.handlers.onRotateHandlePointerDown}
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg 
+      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }}
+      onPointerMove={e => { sagBox1.svgRootProps.onPointerMove(e); sagBox2.svgRootProps.onPointerMove(e); }}
+      onPointerUp={() => { sagBox1.svgRootProps.onPointerUp(); sagBox2.svgRootProps.onPointerUp(); }}
+      onPointerLeave={() => { sagBox1.svgRootProps.onPointerLeave(); sagBox2.svgRootProps.onPointerLeave(); }}
+    >
+      <FOVPlanningBox corners={sagBox1.corners} hasImage={hasImage} lineStyle="dashed" showReferenceLine={false} onBodyPointerDown={sagBox1.handlers.onBodyPointerDown} onRotateHandlePointerDown={sagBox1.handlers.onRotateHandlePointerDown} />
+      <FOVPlanningBox corners={sagBox2.corners} hasImage={hasImage} lineStyle="dashed" showReferenceLine={false} onBodyPointerDown={sagBox2.handlers.onBodyPointerDown} onRotateHandlePointerDown={sagBox2.handlers.onRotateHandlePointerDown} />
+    </svg>
+  );
+}
 
 // ── Component ─────────────────────────────────────────────
 
@@ -637,16 +714,7 @@ export default function MRIViewport({ plane }: Props) {
       />
       
       {showFov && size.w > 0 && size.h > 0 && (
-        <FOVPlanningBox 
-          corners={(() => {
-            const isTarget = getPlanningTargetPlane(planning) === plane;
-            const h = getFovHandles2D(planning, plane, size.w, size.h, isTarget);
-            return [h.tl, h.tr, h.br, h.bl];
-          })()}
-          sliceCount={getPlanningTargetPlane(planning) === plane ? 0 : planning.sliceCount}
-          sliceOrientation={plane === 'sagittal' ? 'vertical' : 'horizontal'}
-          showLocalizer={true}
-        />
+        <FOVOverlay plane={plane} size={size} />
       )}
     </div>
   );
