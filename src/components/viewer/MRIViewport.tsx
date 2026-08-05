@@ -10,8 +10,8 @@ import {
   axisAngleToMatrix, multiplyMatrices, matrixToEuler,
 } from '@/lib/geometry';
 import { toast } from '@/lib/toast';
-import FOVPlanningBox, { type Point } from './FOVPlanningBox';
-import { useFOVBoxController } from './useFOVBoxController';
+import ActiveFOV from './ActiveFOV';
+import ProjectedSlab from './ProjectedSlab';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -46,144 +46,20 @@ interface DragState {
 
 interface Props { plane: Plane; }
 
-// ── FOV Overlay Component ─────────────────────────────────
+// ── Overlay Wrapper Component ─────────────────────────────────
 
-function FOVOverlay({ plane, size }: { plane: Plane, size: { w: number, h: number } }) {
+function PlanningOverlay({ plane, size }: { plane: Plane, size: { w: number, h: number } }) {
   const images = useWorkstationStore(s => s.images);
-  const hasImage = !!images[plane];
-
   const planning = useWorkstationStore(s => s.planning);
-  const setPlanning = useWorkstationStore(s => s.setPlanning);
+  const hasImage = !!images[plane];
 
   if (!hasImage || size.w === 0 || size.h === 0) return null;
 
-  const pxPerMm = size.w / VIEW_FOV_MM;
-  const cx = size.w / 2;
-  const cy = size.h / 2;
-
-  const fovW = planning.fovRead * pxPerMm;
-  const fovH = planning.fovPhase * pxPerMm;
-  const slabThickness = planning.sliceCount * (planning.sliceThickness + planning.sliceGap) * pxPerMm;
-
-  const hwAxiX = fovW / 2;
-  const hwAxiY = fovH / 2;
-  const rZ = planning.rotZ * (Math.PI / 180);
-  const axiCorners: [Point, Point, Point, Point] = [
-    { x: cx - hwAxiX, y: cy - hwAxiY },
-    { x: cx + hwAxiX, y: cy - hwAxiY },
-    { x: cx - hwAxiX, y: cy + hwAxiY },
-    { x: cx + hwAxiX, y: cy + hwAxiY },
-  ];
-  const axiCornersRot = axiCorners.map(p => {
-    const s = Math.sin(rZ), cos = Math.cos(rZ);
-    const dx = p.x - cx, dy = p.y - cy;
-    return { x: cx + dx * cos - dy * s, y: cy + dx * s + dy * cos };
-  }) as [Point, Point, Point, Point];
-
-  const hwCorX = fovW / 2;
-  const hwCorY = slabThickness / 2;
-  const corCorners: [Point, Point, Point, Point] = [
-    { x: cx - hwCorX, y: cy - hwCorY },
-    { x: cx + hwCorX, y: cy - hwCorY },
-    { x: cx - hwCorX, y: cy + hwCorY },
-    { x: cx + hwCorX, y: cy + hwCorY },
-  ];
-
-  const hwSagX = fovH / 2;
-  const hwSagY = slabThickness / 2;
-  const sagCorners: [Point, Point, Point, Point] = [
-    { x: cx - hwSagX, y: cy - hwSagY },
-    { x: cx + hwSagX, y: cy - hwSagY },
-    { x: cx - hwSagX, y: cy + hwSagY },
-    { x: cx + hwSagX, y: cy + hwSagY },
-  ];
-
-  const axiBox = useFOVBoxController(axiCornersRot, (c) => {
-    const readPx = Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y);
-    const phasePx = Math.hypot(c[2].x - c[0].x, c[2].y - c[0].y);
-    let angle = Math.atan2(c[1].y - c[0].y, c[1].x - c[0].x) * (180 / Math.PI);
-    if (angle < 0) angle += 360;
-    setPlanning({ fovRead: Math.round(readPx / pxPerMm), fovPhase: Math.round(phasePx / pxPerMm), rotZ: Math.round(angle) });
-  }, 'br');
-
-  const corBox = useFOVBoxController(corCorners, (c) => {
-    const readPx = Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y);
-    const slabPx = Math.hypot(c[2].x - c[0].x, c[2].y - c[0].y);
-    setPlanning({ fovRead: Math.round(readPx / pxPerMm), sliceThickness: Math.max(0.1, (slabPx / pxPerMm) / planning.sliceCount - planning.sliceGap) });
-  }, 'bl');
-
-  const sagBox = useFOVBoxController(sagCorners, (c) => {
-    const phasePx = Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y);
-    const slabPx = Math.hypot(c[2].x - c[0].x, c[2].y - c[0].y);
-    setPlanning({ fovPhase: Math.round(phasePx / pxPerMm), sliceThickness: Math.max(0.1, (slabPx / pxPerMm) / planning.sliceCount - planning.sliceGap) });
-  }, 'none');
-
-  if (plane === 'axial') {
-    return (
-      <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }} {...axiBox.svgRootProps}>
-        <FOVPlanningBox
-          corners={axiBox.corners}
-          hasImage={hasImage}
-          lineStyle="dashed"
-          showReferenceLine={true}
-          referenceLineT={0.5}
-          showCrosshair={true}
-          showLocalizer={true}
-          rotateHandleAt="br"
-          onBodyPointerDown={axiBox.handlers.onBodyPointerDown}
-          onRotateHandlePointerDown={axiBox.handlers.onRotateHandlePointerDown}
-          showCornerHitTargets={true}
-          onCornerPointerDown={axiBox.handlers.onCornerPointerDown}
-        />
-      </svg>
-    );
+  if (plane === planning.orientation) {
+    return <ActiveFOV plane={plane} size={size} />;
   }
 
-  if (plane === 'coronal') {
-    return (
-      <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }} {...corBox.svgRootProps}>
-        <FOVPlanningBox
-          corners={corBox.corners}
-          hasImage={hasImage}
-          lineStyle="solid"
-          showReferenceLine={true}
-          referenceLineT={1.0}
-          showCircleMarker={true}
-          circleMarkerT={0.5}
-          sliceCount={0}
-          showCrosshair={true}
-          rotateHandleAt="bl"
-          onBodyPointerDown={corBox.handlers.onBodyPointerDown}
-          onRotateHandlePointerDown={corBox.handlers.onRotateHandlePointerDown}
-          showCornerHitTargets={true}
-          onCornerPointerDown={corBox.handlers.onCornerPointerDown}
-        />
-      </svg>
-    );
-  }
-
-  return (
-    <svg 
-      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }}
-      onPointerMove={sagBox.svgRootProps.onPointerMove}
-      onPointerUp={sagBox.svgRootProps.onPointerUp}
-      onPointerLeave={sagBox.svgRootProps.onPointerLeave}
-    >
-      <FOVPlanningBox 
-        corners={sagBox.corners} 
-        hasImage={hasImage} 
-        lineStyle="dashed" 
-        showReferenceLine={false} 
-        sliceCount={planning.sliceCount}
-        sliceTicks="left-right"
-        showCrosshair={true}
-        onBodyPointerDown={sagBox.handlers.onBodyPointerDown} 
-        onRotateHandlePointerDown={sagBox.handlers.onRotateHandlePointerDown} 
-        showCornerHitTargets={true} 
-        onCornerPointerDown={sagBox.handlers.onCornerPointerDown} 
-      />
-    </svg>
-  );
+  return <ProjectedSlab plane={plane} size={size} />;
 }
 
 // ── Component ─────────────────────────────────────────────
@@ -777,8 +653,8 @@ export default function MRIViewport({ plane }: Props) {
         style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
       />
       
-      {showFov && size.w > 0 && size.h > 0 && (
-        <FOVOverlay plane={plane} size={size} />
+      {showFov && (
+        <PlanningOverlay plane={plane} size={size} />
       )}
     </div>
   );
