@@ -12,7 +12,6 @@ import {
 import { toast } from '@/lib/toast';
 import FOVPlanningBox, { type Point } from './FOVPlanningBox';
 import { useFOVBoxController } from './useFOVBoxController';
-import { useFOVGeometrySync } from './useFOVGeometrySync';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -53,38 +52,71 @@ function FOVOverlay({ plane, size }: { plane: Plane, size: { w: number, h: numbe
   const images = useWorkstationStore(s => s.images);
   const hasImage = !!images[plane];
 
-  const hw = 75;
+  const planning = useWorkstationStore(s => s.planning);
+  const setPlanning = useWorkstationStore(s => s.setPlanning);
+
+  if (!hasImage || size.w === 0 || size.h === 0) return null;
+
+  const pxPerMm = size.w / VIEW_FOV_MM;
   const cx = size.w / 2;
   const cy = size.h / 2;
 
-  const initialCorners: [Point, Point, Point, Point] = [
-    { x: cx - hw, y: cy - hw }, // tl
-    { x: cx + hw, y: cy - hw }, // tr
-    { x: cx - hw, y: cy + hw }, // bl
-    { x: cx + hw, y: cy + hw }, // br
+  const fovW = planning.fovRead * pxPerMm;
+  const fovH = planning.fovPhase * pxPerMm;
+  const slabThickness = planning.sliceCount * (planning.sliceThickness + planning.sliceGap) * pxPerMm;
+
+  const hwAxiX = fovW / 2;
+  const hwAxiY = fovH / 2;
+  const rZ = planning.rotZ * (Math.PI / 180);
+  const axiCorners: [Point, Point, Point, Point] = [
+    { x: cx - hwAxiX, y: cy - hwAxiY },
+    { x: cx + hwAxiX, y: cy - hwAxiY },
+    { x: cx - hwAxiX, y: cy + hwAxiY },
+    { x: cx + hwAxiX, y: cy + hwAxiY },
+  ];
+  const axiCornersRot = axiCorners.map(p => {
+    const s = Math.sin(rZ), cos = Math.cos(rZ);
+    const dx = p.x - cx, dy = p.y - cy;
+    return { x: cx + dx * cos - dy * s, y: cy + dx * s + dy * cos };
+  }) as [Point, Point, Point, Point];
+
+  const hwCorX = fovW / 2;
+  const hwCorY = slabThickness / 2;
+  const corCorners: [Point, Point, Point, Point] = [
+    { x: cx - hwCorX, y: cy - hwCorY },
+    { x: cx + hwCorX, y: cy - hwCorY },
+    { x: cx - hwCorX, y: cy + hwCorY },
+    { x: cx + hwCorX, y: cy + hwCorY },
   ];
 
-  const axiBox = useFOVBoxController(initialCorners, 'br');
-  const corBox = useFOVBoxController(initialCorners, 'bl');
-  const sagBox1 = useFOVBoxController(initialCorners, 'none');
-  const sagBox2 = useFOVBoxController([
-    { x: cx - hw, y: cy - hw + 30 },
-    { x: cx + hw, y: cy - hw + 30 },
-    { x: cx - hw, y: cy + hw - 30 },
-    { x: cx + hw, y: cy + hw - 30 },
-  ], 'none');
+  const hwSagX = fovH / 2;
+  const hwSagY = slabThickness / 2;
+  const sagCorners: [Point, Point, Point, Point] = [
+    { x: cx - hwSagX, y: cy - hwSagY },
+    { x: cx + hwSagX, y: cy - hwSagY },
+    { x: cx - hwSagX, y: cy + hwSagY },
+    { x: cx + hwSagX, y: cy + hwSagY },
+  ];
 
-  const planning = useWorkstationStore(s => s.planning);
-  const setPlanning = useWorkstationStore(s => s.setPlanning);
-  const pxPerMm = size.w / VIEW_FOV_MM;
-  const storeGeometry = { fovReadMm: planning.fovRead, fovPhaseMm: planning.fovPhase, rotationDeg: planning.rotZ || 0 };
-  const updateStore = (geo: any) => setPlanning({ fovRead: geo.fovReadMm ?? planning.fovRead, fovPhase: geo.fovPhaseMm ?? planning.fovPhase, rotZ: geo.rotationDeg ?? planning.rotZ });
+  const axiBox = useFOVBoxController(axiCornersRot, (c) => {
+    const readPx = Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y);
+    const phasePx = Math.hypot(c[2].x - c[0].x, c[2].y - c[0].y);
+    let angle = Math.atan2(c[1].y - c[0].y, c[1].x - c[0].x) * (180 / Math.PI);
+    if (angle < 0) angle += 360;
+    setPlanning({ fovRead: Math.round(readPx / pxPerMm), fovPhase: Math.round(phasePx / pxPerMm), rotZ: Math.round(angle) });
+  }, 'br');
 
-  useFOVGeometrySync(axiBox.corners, axiBox.setCorners, pxPerMm, storeGeometry, updateStore);
-  useFOVGeometrySync(corBox.corners, corBox.setCorners, pxPerMm, storeGeometry, updateStore);
-  useFOVGeometrySync(sagBox1.corners, sagBox1.setCorners, pxPerMm, storeGeometry, updateStore);
+  const corBox = useFOVBoxController(corCorners, (c) => {
+    const readPx = Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y);
+    const slabPx = Math.hypot(c[2].x - c[0].x, c[2].y - c[0].y);
+    setPlanning({ fovRead: Math.round(readPx / pxPerMm), sliceThickness: Math.max(0.1, (slabPx / pxPerMm) / planning.sliceCount - planning.sliceGap) });
+  }, 'bl');
 
-  if (!hasImage) return null;
+  const sagBox = useFOVBoxController(sagCorners, (c) => {
+    const phasePx = Math.hypot(c[1].x - c[0].x, c[1].y - c[0].y);
+    const slabPx = Math.hypot(c[2].x - c[0].x, c[2].y - c[0].y);
+    setPlanning({ fovPhase: Math.round(phasePx / pxPerMm), sliceThickness: Math.max(0.1, (slabPx / pxPerMm) / planning.sliceCount - planning.sliceGap) });
+  }, 'none');
 
   if (plane === 'axial') {
     return (
@@ -94,7 +126,9 @@ function FOVOverlay({ plane, size }: { plane: Plane, size: { w: number, h: numbe
           hasImage={hasImage}
           lineStyle="dashed"
           showReferenceLine={true}
-          referenceLineT={0.55}
+          referenceLineT={0.5}
+          showCrosshair={true}
+          showLocalizer={true}
           rotateHandleAt="br"
           onBodyPointerDown={axiBox.handlers.onBodyPointerDown}
           onRotateHandlePointerDown={axiBox.handlers.onRotateHandlePointerDown}
@@ -113,8 +147,11 @@ function FOVOverlay({ plane, size }: { plane: Plane, size: { w: number, h: numbe
           hasImage={hasImage}
           lineStyle="solid"
           showReferenceLine={true}
-          referenceLineT={0.9}
+          referenceLineT={1.0}
+          showCircleMarker={true}
           circleMarkerT={0.5}
+          sliceCount={0}
+          showCrosshair={true}
           rotateHandleAt="bl"
           onBodyPointerDown={corBox.handlers.onBodyPointerDown}
           onRotateHandlePointerDown={corBox.handlers.onRotateHandlePointerDown}
@@ -128,12 +165,23 @@ function FOVOverlay({ plane, size }: { plane: Plane, size: { w: number, h: numbe
   return (
     <svg 
       style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }}
-      onPointerMove={e => { sagBox1.svgRootProps.onPointerMove(e); sagBox2.svgRootProps.onPointerMove(e); }}
-      onPointerUp={() => { sagBox1.svgRootProps.onPointerUp(); sagBox2.svgRootProps.onPointerUp(); }}
-      onPointerLeave={() => { sagBox1.svgRootProps.onPointerLeave(); sagBox2.svgRootProps.onPointerLeave(); }}
+      onPointerMove={sagBox.svgRootProps.onPointerMove}
+      onPointerUp={sagBox.svgRootProps.onPointerUp}
+      onPointerLeave={sagBox.svgRootProps.onPointerLeave}
     >
-      <FOVPlanningBox corners={sagBox1.corners} hasImage={hasImage} lineStyle="dashed" showReferenceLine={false} onBodyPointerDown={sagBox1.handlers.onBodyPointerDown} onRotateHandlePointerDown={sagBox1.handlers.onRotateHandlePointerDown} showCornerHitTargets={true} onCornerPointerDown={sagBox1.handlers.onCornerPointerDown} />
-      <FOVPlanningBox corners={sagBox2.corners} hasImage={hasImage} lineStyle="dashed" showReferenceLine={false} onBodyPointerDown={sagBox2.handlers.onBodyPointerDown} onRotateHandlePointerDown={sagBox2.handlers.onRotateHandlePointerDown} showCornerHitTargets={true} onCornerPointerDown={sagBox2.handlers.onCornerPointerDown} />
+      <FOVPlanningBox 
+        corners={sagBox.corners} 
+        hasImage={hasImage} 
+        lineStyle="dashed" 
+        showReferenceLine={false} 
+        sliceCount={planning.sliceCount}
+        sliceTicks="left-right"
+        showCrosshair={true}
+        onBodyPointerDown={sagBox.handlers.onBodyPointerDown} 
+        onRotateHandlePointerDown={sagBox.handlers.onRotateHandlePointerDown} 
+        showCornerHitTargets={true} 
+        onCornerPointerDown={sagBox.handlers.onCornerPointerDown} 
+      />
     </svg>
   );
 }

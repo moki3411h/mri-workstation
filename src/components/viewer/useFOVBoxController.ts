@@ -17,13 +17,13 @@ const rotatePoint = (p: Point, center: Point, angle: number): Point => {
 };
 
 export function useFOVBoxController(
-  initialCorners: [Point, Point, Point, Point],
+  corners: [Point, Point, Point, Point],
+  onChange: (c: [Point, Point, Point, Point]) => void,
   rotateHandleCorner: Corner | "none" = "br"
 ) {
-  const [corners, setCorners] = useState<[Point, Point, Point, Point]>(initialCorners);
   const dragMode = useRef<DragMode>(null);
   const dragStart = useRef<Point>({ x: 0, y: 0 });
-  const cornersAtDragStart = useRef<[Point, Point, Point, Point]>(initialCorners);
+  const cornersAtDragStart = useRef<[Point, Point, Point, Point]>(corners);
 
   const toLocalPoint = (e: React.PointerEvent<SVGElement>): Point => {
     const svg = (e.target as SVGElement).ownerSVGElement || (e.currentTarget as unknown as SVGSVGElement);
@@ -59,7 +59,7 @@ export function useFOVBoxController(
 
     if (dragMode.current.type === "move") {
       const delta = sub(current, dragStart.current);
-      setCorners(start.map((p) => add(p, delta)) as [Point, Point, Point, Point]);
+      onChange(start.map((p) => add(p, delta)) as [Point, Point, Point, Point]);
       return;
     }
 
@@ -68,7 +68,7 @@ export function useFOVBoxController(
       const startAngle = Math.atan2(dragStart.current.y - center.y, dragStart.current.x - center.x);
       const currentAngle = Math.atan2(current.y - center.y, current.x - center.x);
       const delta = currentAngle - startAngle;
-      setCorners(start.map((p) => rotatePoint(p, center, delta)) as [Point, Point, Point, Point]);
+      onChange(start.map((p) => rotatePoint(p, center, delta)) as [Point, Point, Point, Point]);
       return;
     }
 
@@ -77,9 +77,9 @@ export function useFOVBoxController(
       const i = idx[dragMode.current.corner];
       const next = [...start] as [Point, Point, Point, Point];
       next[i] = current;
-      setCorners(next);
+      onChange(next);
     }
-  }, []);
+  }, [corners, onChange]);
 
   const onPointerUp = useCallback(() => {
     dragMode.current = null;
@@ -87,7 +87,6 @@ export function useFOVBoxController(
 
   return {
     corners,
-    setCorners,
     handlers: {
       onBodyPointerDown: startMove,
       onRotateHandlePointerDown: startRotate,

@@ -5,6 +5,7 @@ interface GeometryValues {
   fovReadMm: number;
   fovPhaseMm: number;
   rotationDeg: number;
+  slabThicknessMm?: number;
 }
 
 const sub = (a: Point, b: Point): Point => ({ x: a.x - b.x, y: a.y - b.y });
@@ -25,7 +26,8 @@ export function useFOVGeometrySync(
   setCorners: (c: [Point, Point, Point, Point]) => void,
   pxPerMm: number,
   storeGeometry: GeometryValues,
-  updateStore: (geo: Partial<GeometryValues>) => void
+  updateStore: (geo: Partial<GeometryValues>) => void,
+  mode: "fov" | "thickness" = "fov"
 ) {
   // Sync local corners -> global store (when dragged)
   useEffect(() => {
@@ -48,15 +50,25 @@ export function useFOVGeometrySync(
     const rotDeg = Math.round(angle);
     
     // Only update if changed
-    if (
-      readMm !== storeGeometry.fovReadMm ||
-      phaseMm !== storeGeometry.fovPhaseMm ||
-      Math.abs(rotDeg - storeGeometry.rotationDeg) > 1 // allow 1 degree tolerance
-    ) {
-      // Avoid circular updates by debouncing or checking source
-      updateStore({ fovReadMm: readMm, fovPhaseMm: phaseMm, rotationDeg: rotDeg });
+    if (mode === "fov") {
+      if (
+        readMm !== storeGeometry.fovReadMm ||
+        phaseMm !== storeGeometry.fovPhaseMm ||
+        Math.abs(rotDeg - storeGeometry.rotationDeg) > 1
+      ) {
+        updateStore({ fovReadMm: readMm, fovPhaseMm: phaseMm, rotationDeg: rotDeg });
+      }
+    } else {
+      // In thickness mode, height (phasePx) represents the total slab thickness
+      if (
+        readMm !== storeGeometry.fovReadMm ||
+        phaseMm !== storeGeometry.slabThicknessMm ||
+        Math.abs(rotDeg - storeGeometry.rotationDeg) > 1
+      ) {
+        updateStore({ fovReadMm: readMm, slabThicknessMm: phaseMm, rotationDeg: rotDeg });
+      }
     }
-  }, [corners, pxPerMm, storeGeometry.fovReadMm, storeGeometry.fovPhaseMm, storeGeometry.rotationDeg, updateStore]);
+  }, [corners, pxPerMm, storeGeometry.fovReadMm, storeGeometry.fovPhaseMm, storeGeometry.slabThicknessMm, storeGeometry.rotationDeg, mode, updateStore]);
 
   // We could also do store -> corners, but that requires knowing the center point.
   // For now, assume corner dragging is the primary driver for rotation/size in the UI.
