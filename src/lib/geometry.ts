@@ -18,33 +18,88 @@ export interface Point3D { x: number; y: number; z: number; }
 /** Scale factor: how many mm fits across the viewport */
 export const VIEW_FOV_MM = 300;
 
-// ── 3D Math ────────────────────────────────────────────────────────────────
+// ── 3x3 Matrix Math ────────────────────────────────────────────────────────
+export type Matrix3x3 = [
+  number, number, number,
+  number, number, number,
+  number, number, number
+];
 
-export function rotateX(p: Point3D, deg: number): Point3D {
-  const r = deg * Math.PI / 180;
-  const c = Math.cos(r), s = Math.sin(r);
-  return { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c };
+export const IDENTITY_MATRIX: Matrix3x3 = [
+  1, 0, 0,
+  0, 1, 0,
+  0, 0, 1
+];
+
+export function multiplyMatrixAndPoint(m: Matrix3x3, p: Point3D): Point3D {
+  return {
+    x: m[0]*p.x + m[1]*p.y + m[2]*p.z,
+    y: m[3]*p.x + m[4]*p.y + m[5]*p.z,
+    z: m[6]*p.x + m[7]*p.y + m[8]*p.z,
+  };
 }
 
-export function rotateY(p: Point3D, deg: number): Point3D {
-  const r = deg * Math.PI / 180;
-  const c = Math.cos(r), s = Math.sin(r);
-  return { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c };
+export function multiplyMatrices(a: Matrix3x3, b: Matrix3x3): Matrix3x3 {
+  return [
+    a[0]*b[0] + a[1]*b[3] + a[2]*b[6],  a[0]*b[1] + a[1]*b[4] + a[2]*b[7],  a[0]*b[2] + a[1]*b[5] + a[2]*b[8],
+    a[3]*b[0] + a[4]*b[3] + a[5]*b[6],  a[3]*b[1] + a[4]*b[4] + a[5]*b[7],  a[3]*b[2] + a[4]*b[5] + a[5]*b[8],
+    a[6]*b[0] + a[7]*b[3] + a[8]*b[6],  a[6]*b[1] + a[7]*b[4] + a[8]*b[7],  a[6]*b[2] + a[7]*b[5] + a[8]*b[8],
+  ];
 }
 
-export function rotateZ(p: Point3D, deg: number): Point3D {
-  const r = deg * Math.PI / 180;
-  const c = Math.cos(r), s = Math.sin(r);
-  return { x: p.x * c - p.y * s, y: p.x * s + p.y * c, z: p.z };
+/** Create rotation matrix from axis and angle (in degrees) */
+export function axisAngleToMatrix(axis: Point3D, angleDeg: number): Matrix3x3 {
+  const rad = angleDeg * Math.PI / 180;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  const t = 1 - c;
+  const x = axis.x, y = axis.y, z = axis.z;
+  
+  return [
+    t*x*x + c,    t*x*y - z*s,  t*x*z + y*s,
+    t*x*y + z*s,  t*y*y + c,    t*y*z - x*s,
+    t*x*z - y*s,  t*y*z + x*s,  t*z*z + c
+  ];
 }
 
-/** Apply planning object rotation (rotX=pitch, rotY=yaw, rotZ=roll) */
+export function eulerToMatrix(rotX: number, rotY: number, rotZ: number): Matrix3x3 {
+  const cx = Math.cos(rotX * Math.PI / 180), sx = Math.sin(rotX * Math.PI / 180);
+  const cy = Math.cos(rotY * Math.PI / 180), sy = Math.sin(rotY * Math.PI / 180);
+  const cz = Math.cos(rotZ * Math.PI / 180), sz = Math.sin(rotZ * Math.PI / 180);
+  return [
+    cy*cz, cz*sx*sy - cx*sz, cx*cz*sy + sx*sz,
+    cy*sz, cx*cz + sx*sy*sz, cx*sy*sz - cz*sx,
+    -sy,   cy*sx,            cx*cy
+  ];
+}
+
+export function matrixToEuler(m: Matrix3x3): { rotX: number; rotY: number; rotZ: number } {
+  let rotX, rotY, rotZ;
+  if (m[6] < 1) {
+    if (m[6] > -1) {
+      rotY = Math.asin(-m[6]);
+      rotZ = Math.atan2(m[3], m[0]);
+      rotX = Math.atan2(m[7], m[8]);
+    } else {
+      rotY = Math.PI / 2;
+      rotZ = -Math.atan2(-m[5], m[4]);
+      rotX = 0;
+    }
+  } else {
+    rotY = -Math.PI / 2;
+    rotZ = Math.atan2(-m[5], m[4]);
+    rotX = 0;
+  }
+  return {
+    rotX: rotX * 180 / Math.PI,
+    rotY: rotY * 180 / Math.PI,
+    rotZ: rotZ * 180 / Math.PI
+  };
+}
+
+/** Apply planning object rotation matrix */
 export function applyPlanningRotation(p: Point3D, plan: PlanningObject): Point3D {
-  let q = { ...p };
-  q = rotateX(q, plan.rotX);
-  q = rotateY(q, plan.rotY);
-  q = rotateZ(q, plan.rotZ);
-  return q;
+  return multiplyMatrixAndPoint(plan.rotationMatrix as Matrix3x3, p);
 }
 
 // ── Projection ─────────────────────────────────────────────────────────────
@@ -182,19 +237,47 @@ export interface Handles2D {
 
 /**
  * Project the FOV rectangle to 2D handles for the given viewport.
- * Returns null if this viewport is not the "active planning" view.
+ * For the active view, projects the FoV Read x Phase plane.
+ * For projected views, projects the FoV Read x Slab Depth profile.
  */
-export function getFovHandles2D(plan: PlanningObject, plane: Plane, W: number, H: number): Handles2D {
-  const corners3D = getFovCorners3D(plan);
-  const [tl, tr, br, bl] = corners3D.map(c => project3Dto2D(c, plane, W, H)) as [Point2D, Point2D, Point2D, Point2D];
+export function getFovHandles2D(plan: PlanningObject, plane: Plane, W: number, H: number, isActive: boolean): Handles2D {
+  if (isActive) {
+    const corners3D = getFovCorners3D(plan);
+    const [tl, tr, br, bl] = corners3D.map(c => project3Dto2D(c, plane, W, H)) as [Point2D, Point2D, Point2D, Point2D];
+    return computeHandlesFromQuad([tl, tr, br, bl]);
+  } else {
+    const center = { x: plan.centerX, y: plan.centerY, z: plan.centerZ };
+    
+    let readDirLocal: Point3D;
+    if (plan.orientation === 'axial') readDirLocal = { x: 1, y: 0, z: 0 };
+    else if (plan.orientation === 'coronal') readDirLocal = { x: 1, y: 0, z: 0 };
+    else readDirLocal = { x: 0, y: 1, z: 0 };
+    
+    const readDir = applyPlanningRotation(readDirLocal, plan);
+    const normalDir = getSliceNormal(plan);
+    
+    const hw = plan.fovRead / 2;
+    const hd = getSlabDepth(plan) / 2;
+    
+    // Top-left is positive normal, negative read
+    const c1 = { x: center.x - readDir.x*hw + normalDir.x*hd, y: center.y - readDir.y*hw + normalDir.y*hd, z: center.z - readDir.z*hw + normalDir.z*hd };
+    const c2 = { x: center.x + readDir.x*hw + normalDir.x*hd, y: center.y + readDir.y*hw + normalDir.y*hd, z: center.z + readDir.z*hw + normalDir.z*hd };
+    const c3 = { x: center.x + readDir.x*hw - normalDir.x*hd, y: center.y + readDir.y*hw - normalDir.y*hd, z: center.z + readDir.z*hw - normalDir.z*hd };
+    const c4 = { x: center.x - readDir.x*hw - normalDir.x*hd, y: center.y - readDir.y*hw - normalDir.y*hd, z: center.z - readDir.z*hw - normalDir.z*hd };
+    
+    const [tl, tr, br, bl] = [c1, c2, c3, c4].map(c => project3Dto2D(c, plane, W, H)) as [Point2D, Point2D, Point2D, Point2D];
+    return computeHandlesFromQuad([tl, tr, br, bl]);
+  }
+}
 
+function computeHandlesFromQuad(corners: [Point2D, Point2D, Point2D, Point2D]): Handles2D {
+  const [tl, tr, br, bl] = corners;
   const top    = { x: (tl.x + tr.x) / 2, y: (tl.y + tr.y) / 2 };
   const bottom = { x: (bl.x + br.x) / 2, y: (bl.y + br.y) / 2 };
   const left   = { x: (tl.x + bl.x) / 2, y: (tl.y + bl.y) / 2 };
   const right  = { x: (tr.x + br.x) / 2, y: (tr.y + br.y) / 2 };
   const center = { x: (tl.x + br.x) / 2, y: (tl.y + br.y) / 2 };
 
-  // Rotation handle: extend 40px beyond top-center, perpendicular to top edge
   const dx = top.x - center.x;
   const dy = top.y - center.y;
   const len = Math.hypot(dx, dy);
@@ -208,25 +291,21 @@ export function getFovHandles2D(plan: PlanningObject, plane: Plane, W: number, H
 // ── Hit Testing ────────────────────────────────────────────────────────────
 
 const HANDLE_RADIUS = 12;
-const EDGE_TOLERANCE = 10;
 
 export function hitTestFov(px: number, py: number, handles: Handles2D): string | null {
-  // Check rotation handle first (smallest target, on top)
+  // Hit-test z-order: Rotation > Corners > Edges > Box Interior
   if (Math.hypot(px - handles.rot.x, py - handles.rot.y) < HANDLE_RADIUS + 2) return 'rotate';
 
-  // Corner handles
   if (Math.hypot(px - handles.tl.x, py - handles.tl.y) < HANDLE_RADIUS) return 'tl';
   if (Math.hypot(px - handles.tr.x, py - handles.tr.y) < HANDLE_RADIUS) return 'tr';
   if (Math.hypot(px - handles.br.x, py - handles.br.y) < HANDLE_RADIUS) return 'br';
   if (Math.hypot(px - handles.bl.x, py - handles.bl.y) < HANDLE_RADIUS) return 'bl';
 
-  // Edge midpoint handles
   if (Math.hypot(px - handles.top.x, py - handles.top.y) < HANDLE_RADIUS) return 'top';
   if (Math.hypot(px - handles.bottom.x, py - handles.bottom.y) < HANDLE_RADIUS) return 'bottom';
   if (Math.hypot(px - handles.left.x, py - handles.left.y) < HANDLE_RADIUS) return 'left';
   if (Math.hypot(px - handles.right.x, py - handles.right.y) < HANDLE_RADIUS) return 'right';
 
-  // Point-in-polygon test for body (move)
   const poly = [handles.tl, handles.tr, handles.br, handles.bl];
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {

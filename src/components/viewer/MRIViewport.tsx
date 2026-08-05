@@ -1,14 +1,16 @@
 'use client';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useWorkstationStore, type PlanningObject } from '@/store/workstationStore';
 import {
-  type Plane,
+  type Plane, type Point3D, type Matrix3x3,
   project3Dto2D, unproject2Dto3D,
-  getFovHandles2D, hitTestFov, projectSlicePolygons,
+  getFovHandles2D, hitTestFov,
   getPlanningTargetPlane, CURSOR_MAP,
   VIEW_FOV_MM,
+  axisAngleToMatrix, multiplyMatrices, matrixToEuler,
 } from '@/lib/geometry';
 import { toast } from '@/lib/toast';
+import { FOVPlanningBox } from './FOVPlanningBox';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -54,6 +56,8 @@ export default function MRIViewport({ plane }: Props) {
   const pan       = useRef({ x: 0, y: 0 });
   const zoom      = useRef(1);
 
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
   // ── Image loading ─────────────────────────────────────────
 
   useEffect(() => {
@@ -86,13 +90,17 @@ export default function MRIViewport({ plane }: Props) {
     if (!wrap || !c) return;
     const ro = new ResizeObserver(() => {
       const r = wrap.getBoundingClientRect();
-      c.width  = Math.max(1, Math.round(r.width));
-      c.height = Math.max(1, Math.round(r.height));
+      const w = Math.max(1, Math.round(r.width));
+      const h = Math.max(1, Math.round(r.height));
+      c.width = w; c.height = h;
+      setSize({ w, h });
     });
     ro.observe(wrap);
     const r = wrap.getBoundingClientRect();
-    c.width  = Math.max(1, Math.round(r.width));
-    c.height = Math.max(1, Math.round(r.height));
+    const w = Math.max(1, Math.round(r.width));
+    const h = Math.max(1, Math.round(r.height));
+    c.width = w; c.height = h;
+    setSize({ w, h });
     return () => ro.disconnect();
   }, []);
 
@@ -144,33 +152,27 @@ export default function MRIViewport({ plane }: Props) {
     const targetPlane = getPlanningTargetPlane(store.planning);
     const isTarget = targetPlane === plane;
 
-    if (isTarget) {
-      // On the active planning view: full FOV interaction
-      const handles = getFovHandles2D(store.planning, plane, c.width, c.height);
-      const hitResult = hitTestFov(pos.x * c.width, pos.y * c.height, handles);
+    // We can drag the box from ANY viewport!
+    const handles = getFovHandles2D(store.planning, plane, c.width, c.height, isTarget);
+    const hitResult = hitTestFov(pos.x * c.width, pos.y * c.height, handles);
 
-      if (hitResult) {
-        drag.current = { type: 'fov', handle: hitResult, startX: pos.x, startY: pos.y, initPlan: { ...store.planning } };
-        c.style.cursor = hitResult === 'rotate' ? 'grabbing' : (CURSOR_MAP[hitResult] || 'move');
-      } else {
-        // Click anywhere on image → reposition center of FOV there
-        const dxPx = (pos.x - 0.5) * c.width;
-        const dyPx = (pos.y - 0.5) * c.height;
-        const d3 = unproject2Dto3D(dxPx / zoom.current, dyPx / zoom.current, plane, c.width, c.height);
-        const newPlan = {
-          ...store.planning,
-          centerX: d3.x, centerY: d3.y, centerZ: d3.z,
-        };
-        store.setPlanning(newPlan);
-        drag.current = {
-          type: 'fov', handle: 'move', startX: pos.x, startY: pos.y,
-          initPlan: newPlan,
-        };
-        c.style.cursor = 'move';
-      }
+    if (hitResult) {
+      drag.current = { type: 'fov', handle: hitResult, startX: pos.x, startY: pos.y, initPlan: { ...store.planning } };
+      c.style.cursor = hitResult === 'rotate' ? 'grabbing' : (CURSOR_MAP[hitResult] || 'move');
     } else {
-      // On projected views: drag the slab (move along normal direction)
-      drag.current = { type: 'fov', handle: 'move', startX: pos.x, startY: pos.y, initPlan: { ...store.planning } };
+      // Click outside box → reposition center of FOV
+      const dxPx = (pos.x - 0.5) * c.width;
+      const dyPx = (pos.y - 0.5) * c.height;
+      const d3 = unproject2Dto3D(dxPx / zoom.current, dyPx / zoom.current, plane, c.width, c.height);
+      const newPlan = {
+        ...store.planning,
+        centerX: d3.x, centerY: d3.y, centerZ: d3.z,
+      };
+      store.setPlanning(newPlan);
+      drag.current = {
+        type: 'fov', handle: 'move', startX: pos.x, startY: pos.y,
+        initPlan: newPlan,
+      };
       c.style.cursor = 'move';
     }
   }, [plane, getPos]);
@@ -207,51 +209,80 @@ export default function MRIViewport({ plane }: Props) {
             centerZ: initPlan.centerZ + d3.z,
           });
         } else if (handle === 'rotate') {
-          // Rotation: horizontal drag → rotation around the normal axis of the slice
-          const degPerPx = 180 / c.width;
-          const delta = dxPx * degPerPx;
-          if (plane === 'axial') {
-            store.setPlanning({ rotZ: (initPlan.rotZ + delta) % 360 });
-          } else if (plane === 'coronal') {
-            store.setPlanning({ rotY: (initPlan.rotY + delta) % 360 });
-          } else {
-            store.setPlanning({ rotX: (initPlan.rotX + delta) % 360 });
-          }
+          // Rotation around the normal axis of the current view
+          const degPerPx = 180 / Math.min(c.width, c.height);
+          const deltaAngle = dxPx * degPerPx;
+          
+          let axis: Point3D = { x: 0, y: 0, z: 1 };
+          if (plane === 'axial') axis = { x: 0, y: 0, z: 1 };
+          else if (plane === 'coronal') axis = { x: 0, y: 1, z: 0 };
+          else if (plane === 'sagittal') axis = { x: 1, y: 0, z: 0 };
+          
+          const deltaMatrix = axisAngleToMatrix(axis, deltaAngle);
+          const newMatrix = multiplyMatrices(deltaMatrix, initPlan.rotationMatrix as Matrix3x3);
+          const euler = matrixToEuler(newMatrix);
+          
+          store.setPlanning({
+            rotationMatrix: newMatrix,
+            rotX: euler.rotX,
+            rotY: euler.rotY,
+            rotZ: euler.rotZ
+          });
         } else {
           // Resize — handle specific edges/corners
           const scaleMm = VIEW_FOV_MM / Math.min(c.width, c.height);
           const dxMm = dxPx * scaleMm / zoom.current;
           const dyMm = dyPx * scaleMm / zoom.current;
+          
+          const targetPlane = getPlanningTargetPlane(initPlan);
+          const isTarget = targetPlane === plane;
+          
           let newFovRead = initPlan.fovRead;
           let newFovPhase = initPlan.fovPhase;
+          let newThickness = initPlan.sliceThickness;
 
           const isLeft   = handle === 'left'   || handle === 'tl' || handle === 'bl';
           const isRight  = handle === 'right'  || handle === 'tr' || handle === 'br';
           const isTop    = handle === 'top'    || handle === 'tl' || handle === 'tr';
           const isBottom = handle === 'bottom' || handle === 'bl' || handle === 'br';
 
-          // For FOV read: left edge dragged left increases width, right increases right
-          if (isLeft)   newFovRead = Math.max(20, initPlan.fovRead - dxMm * 2);
-          if (isRight)  newFovRead = Math.max(20, initPlan.fovRead + dxMm * 2);
-          if (isTop)    newFovPhase = Math.max(20, initPlan.fovPhase - dyMm * 2);
-          if (isBottom) newFovPhase = Math.max(20, initPlan.fovPhase + dyMm * 2);
+          if (isTarget) {
+            // For active view: Left/Right scales Read, Top/Bottom scales Phase
+            if (isLeft)   newFovRead = Math.max(10, initPlan.fovRead - dxMm * 2);
+            if (isRight)  newFovRead = Math.max(10, initPlan.fovRead + dxMm * 2);
+            if (isTop)    newFovPhase = Math.max(10, initPlan.fovPhase - dyMm * 2);
+            if (isBottom) newFovPhase = Math.max(10, initPlan.fovPhase + dyMm * 2);
+          } else {
+            // For projected view: Left/Right scales Read, Top/Bottom scales Slab Depth (thickness)
+            if (isLeft)   newFovRead = Math.max(10, initPlan.fovRead - dxMm * 2);
+            if (isRight)  newFovRead = Math.max(10, initPlan.fovRead + dxMm * 2);
+            if (isTop || isBottom) {
+              const deltaDepth = isTop ? -dyMm * 2 : dyMm * 2;
+              // Assuming slab depth is N * thickness + (N-1) * gap
+              // To safely scale, just scale thickness by ratio
+              const oldDepth = Math.max(1, initPlan.sliceCount * initPlan.sliceThickness + (initPlan.sliceCount - 1) * initPlan.sliceGap);
+              const newDepth = Math.max(1, oldDepth + deltaDepth);
+              const ratio = newDepth / oldDepth;
+              newThickness = Math.max(0.1, initPlan.sliceThickness * ratio);
+            }
+          }
 
           // Clamp to reasonable MRI FOV range
           newFovRead  = Math.min(500, newFovRead);
           newFovPhase = Math.min(500, newFovPhase);
 
-          store.setPlanning({ fovRead: newFovRead, fovPhase: newFovPhase });
+          store.setPlanning({ fovRead: newFovRead, fovPhase: newFovPhase, sliceThickness: newThickness });
         }
       }
     } else {
       // Hover: update cursor
       if (!state.planningActive) { c.style.cursor = 'default'; return; }
       
-      const targetPlane = getPlanningTargetPlane(state.planning);
-      if (targetPlane === plane) {
-        const handles = getFovHandles2D(state.planning, plane, c.width, c.height);
-        const hit = hitTestFov(pos.x * c.width, pos.y * c.height, handles);
-        c.style.cursor = hit ? (CURSOR_MAP[hit] || 'default') : 'default';
+      const handles = getFovHandles2D(state.planning, plane, c.width, c.height, getPlanningTargetPlane(state.planning) === plane);
+      const hitResult = hitTestFov(pos.x * c.width, pos.y * c.height, handles);
+      
+      if (hitResult) {
+        c.style.cursor = hitResult === 'rotate' ? 'grabbing' : (CURSOR_MAP[hitResult] || 'move');
       } else {
         c.style.cursor = 'default';
       }
@@ -362,6 +393,9 @@ export default function MRIViewport({ plane }: Props) {
 
   // ── Rendering ─────────────────────────────────────────────
 
+  const planning = useWorkstationStore(s => s.planning);
+  const showFov = useWorkstationStore(s => s.show.fov);
+
   const renderGrid = useCallback((ctx: CanvasRenderingContext2D, W: number, H: number, isDark: boolean) => {
     const gridColor = isDark ? '#0d1e30' : '#d0dae8';
     ctx.strokeStyle = gridColor;
@@ -393,149 +427,7 @@ export default function MRIViewport({ plane }: Props) {
     ctx.fillText(PLANE_LABEL[plane], 6, 5);
   }, [plane, renderGrid]);
 
-  const renderFovBox = useCallback((
-    ctx: CanvasRenderingContext2D,
-    W: number, H: number,
-    plan: PlanningObject,
-    isActive: boolean,
-  ) => {
-    if (isActive) {
-      // ── Active planning viewport: full FOV rectangle + handles ──
-      const handles = getFovHandles2D(plan, plane, W, H);
 
-      // Outline and Semi-transparent fill
-      ctx.beginPath();
-      ctx.moveTo(handles.tl.x, handles.tl.y);
-      ctx.lineTo(handles.tr.x, handles.tr.y);
-      ctx.lineTo(handles.br.x, handles.br.y);
-      ctx.lineTo(handles.bl.x, handles.bl.y);
-      ctx.closePath();
-      
-      // Semi-transparent fill
-      ctx.fillStyle = 'rgba(255, 224, 64, 0.1)';
-      ctx.fill();
-
-      // Outline
-      ctx.strokeStyle = '#ffff00';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([]);
-      ctx.stroke();
-
-      // Rotation handle: dashed line + circle
-      ctx.strokeStyle = '#ffff00';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.moveTo(handles.top.x, handles.top.y);
-      ctx.lineTo(handles.rot.x, handles.rot.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.arc(handles.rot.x, handles.rot.y, 4, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Crosshair at center
-      const cx = handles.center.x, cy = handles.center.y;
-      const cSize = 4;
-      ctx.strokeStyle = '#ffff00';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(cx - cSize, cy); ctx.lineTo(cx + cSize, cy);
-      ctx.moveTo(cx, cy - cSize); ctx.lineTo(cx, cy + cSize);
-      ctx.stroke();
-
-      // 8 Handles (Hollow squares)
-      const hs = 3; // Half-size (so 6x6 total)
-      ctx.strokeStyle = '#ffff00';
-      ctx.lineWidth = 1;
-      const allHandles = [
-        handles.tl, handles.tr, handles.br, handles.bl,
-        handles.top, handles.bottom, handles.left, handles.right
-      ];
-      allHandles.forEach(h => {
-        // We draw hollow squares. Using clearRect to ensure background image shows through isn't strictly necessary 
-        // since we just stroke it, but strokeRect is perfect.
-        ctx.strokeRect(h.x - hs, h.y - hs, hs * 2, hs * 2);
-      });
-
-      // Phase Arrow (indicating Phase Encoding Direction)
-      // Reference image has an arrow on the right edge pointing in Phase direction (typically A->P which is down)
-      // Vector from top to bottom handle represents phase direction.
-      const dx = handles.bottom.x - handles.top.x;
-      const dy = handles.bottom.y - handles.top.y;
-      const len = Math.hypot(dx, dy);
-      if (len > 0) {
-        const nx = dx / len;
-        const ny = dy / len;
-        
-        // Arrow starts from the right handle, pointing "down" along the phase vector
-        const startX = handles.right.x;
-        const startY = handles.right.y;
-        const arrowLen = 18;
-        const endX = startX + nx * arrowLen;
-        const endY = startY + ny * arrowLen;
-
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-
-        // Arrow head (V shape)
-        const headLen = 5;
-        const angle = Math.atan2(ny, nx);
-        ctx.beginPath();
-        ctx.moveTo(endX, endY);
-        ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI/6), endY - headLen * Math.sin(angle - Math.PI/6));
-        ctx.moveTo(endX, endY);
-        ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI/6), endY - headLen * Math.sin(angle + Math.PI/6));
-        ctx.stroke();
-      }
-
-    } else {
-      // ── Projected viewport: true slice thickness via polygons ──
-      const polygons = projectSlicePolygons(plan, plane, W, H);
-      
-      for (const poly of polygons) {
-        ctx.beginPath();
-        ctx.moveTo(poly.corners[0].x, poly.corners[0].y);
-        ctx.lineTo(poly.corners[1].x, poly.corners[1].y);
-        ctx.lineTo(poly.corners[2].x, poly.corners[2].y);
-        ctx.lineTo(poly.corners[3].x, poly.corners[3].y);
-        ctx.closePath();
-
-        // Stroke
-        ctx.strokeStyle = '#ffff00'; // All slice lines are yellow in Siemens reference
-        ctx.lineWidth = 1;
-        if (poly.isCenter) {
-          ctx.setLineDash([5, 5]);
-        } else {
-          ctx.setLineDash([]);
-        }
-        ctx.stroke();
-
-        // Fill with slight green tint for slice volume representation
-        ctx.fillStyle = 'rgba(34, 197, 94, 0.05)';
-        ctx.fill();
-        
-        // Draw the center cross on the middle slice
-        if (poly.isCenter) {
-          const cx = (poly.corners[0].x + poly.corners[1].x + poly.corners[2].x + poly.corners[3].x) / 4;
-          const cy = (poly.corners[0].y + poly.corners[1].y + poly.corners[2].y + poly.corners[3].y) / 4;
-          const cSize = 4;
-          ctx.beginPath();
-          ctx.moveTo(cx - cSize, cy); ctx.lineTo(cx + cSize, cy);
-          ctx.moveTo(cx, cy - cSize); ctx.lineTo(cx, cy + cSize);
-          ctx.stroke();
-          
-          // Draw the small diamond/circle marker in the center
-          ctx.beginPath();
-          ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-      }
-      ctx.setLineDash([]); // Reset
-    }
-  }, [plane]);
 
   const renderCanvas = useCallback(() => {
     const c = canvasRef.current;
@@ -647,12 +539,7 @@ export default function MRIViewport({ plane }: Props) {
       ctx.shadowBlur = 0;
     }
 
-    // ── FOV and Slice Projection ──
-    if (show.fov) {
-      const targetPlane = getPlanningTargetPlane(planning);
-      const isTarget = targetPlane === plane;
-      renderFovBox(ctx, W, H, planning, isTarget);
-    }
+
 
     // ── Scan progress sweep line ──
     if (scan.running && !scan.paused) {
@@ -716,7 +603,7 @@ export default function MRIViewport({ plane }: Props) {
       ];
       dl.forEach((l, i) => ctx.fillText(l, 10, 25 + i * 14));
     }
-  }, [plane, renderEmptyState, renderGrid, renderFovBox]);
+  }, [plane, renderEmptyState, renderGrid]);
 
   // ── RAF loop ──────────────────────────────────────────────
 
@@ -748,6 +635,19 @@ export default function MRIViewport({ plane }: Props) {
         onDoubleClick={onDblClick}
         style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
       />
+      
+      {showFov && size.w > 0 && size.h > 0 && (
+        <FOVPlanningBox 
+          corners={(() => {
+            const isTarget = getPlanningTargetPlane(planning) === plane;
+            const h = getFovHandles2D(planning, plane, size.w, size.h, isTarget);
+            return [h.tl, h.tr, h.br, h.bl];
+          })()}
+          sliceCount={getPlanningTargetPlane(planning) === plane ? 0 : planning.sliceCount}
+          sliceOrientation={plane === 'sagittal' ? 'vertical' : 'horizontal'}
+          showLocalizer={true}
+        />
+      )}
     </div>
   );
 }

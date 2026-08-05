@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { SEQUENCES, type Sequence, calculateTA, formatTime } from '@/lib/scanEngine';
 import { calcSNR, getContrastType, calcResolution } from '@/lib/physics';
+import { eulerToMatrix } from '@/lib/geometry';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -14,10 +15,12 @@ export interface PlanningObject {
   centerX: number;
   centerY: number;
   centerZ: number;
-  /** Rotation angles in degrees */
+  /** Rotation angles in degrees (kept for UI bindings) */
   rotX: number;   // Pitch
   rotY: number;   // Yaw
   rotZ: number;   // Roll
+  /** 3x3 Rotation Matrix as source of truth for 3D orientation */
+  rotationMatrix: number[];
   /** Primary orientation plane */
   orientation: 'axial' | 'coronal' | 'sagittal';
   /** Field of View Read direction (mm) — controls width */
@@ -197,6 +200,7 @@ export interface WorkstationStore {
 export const defaultPlanning: PlanningObject = {
   centerX: 0, centerY: 0, centerZ: 0,
   rotX: 0, rotY: 0, rotZ: 0,
+  rotationMatrix: [1, 0, 0,  0, 1, 0,  0, 0, 1],
   orientation: 'axial',
   fovRead: 220,
   fovPhase: 220,
@@ -382,7 +386,13 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   },
 
   setPlanning: (p) => {
-    const newPlan = { ...get().planning, ...p };
+    const oldPlan = get().planning;
+    const newPlan = { ...oldPlan, ...p };
+    
+    if (p.rotX !== undefined || p.rotY !== undefined || p.rotZ !== undefined) {
+      newPlan.rotationMatrix = eulerToMatrix(newPlan.rotX, newPlan.rotY, newPlan.rotZ);
+    }
+    
     const computed = computePhysics(get().params, newPlan);
     const newSeqs = get().sequences.map(s =>
       s.id === get().selectedSeqId ? { ...s, ta: computed.calcTA, sl: newPlan.sliceCount } : s
@@ -391,7 +401,12 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   },
 
   setPlanningOrientation: (orientation) => {
-    const newPlan = { ...get().planning, orientation, rotX: 0, rotY: 0, rotZ: 0 };
+    const newPlan = { 
+      ...get().planning, 
+      orientation, 
+      rotX: 0, rotY: 0, rotZ: 0,
+      rotationMatrix: [1, 0, 0,  0, 1, 0,  0, 0, 1]
+    };
     const computed = computePhysics(get().params, newPlan);
     set({ planning: newPlan, ...computed, statusMsg: `Orientation: ${orientation.toUpperCase()}` });
   },
