@@ -12,6 +12,7 @@ import {
 import { toast } from '@/lib/toast';
 import FOVPlanningBox, { type Point } from './FOVPlanningBox';
 import { useFOVBoxController } from './useFOVBoxController';
+import { useFOVGeometrySync } from './useFOVGeometrySync';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -73,6 +74,16 @@ function FOVOverlay({ plane, size }: { plane: Plane, size: { w: number, h: numbe
     { x: cx + hw, y: cy + hw - 30 },
   ], 'none');
 
+  const planning = useWorkstationStore(s => s.planning);
+  const setPlanning = useWorkstationStore(s => s.setPlanning);
+  const pxPerMm = size.w / VIEW_FOV_MM;
+  const storeGeometry = { fovReadMm: planning.fovRead, fovPhaseMm: planning.fovPhase, rotationDeg: planning.rotZ || 0 };
+  const updateStore = (geo: any) => setPlanning({ fovRead: geo.fovReadMm ?? planning.fovRead, fovPhase: geo.fovPhaseMm ?? planning.fovPhase, rotZ: geo.rotationDeg ?? planning.rotZ });
+
+  useFOVGeometrySync(axiBox.corners, axiBox.setCorners, pxPerMm, storeGeometry, updateStore);
+  useFOVGeometrySync(corBox.corners, corBox.setCorners, pxPerMm, storeGeometry, updateStore);
+  useFOVGeometrySync(sagBox1.corners, sagBox1.setCorners, pxPerMm, storeGeometry, updateStore);
+
   if (!hasImage) return null;
 
   if (plane === 'axial') {
@@ -87,6 +98,8 @@ function FOVOverlay({ plane, size }: { plane: Plane, size: { w: number, h: numbe
           rotateHandleAt="br"
           onBodyPointerDown={axiBox.handlers.onBodyPointerDown}
           onRotateHandlePointerDown={axiBox.handlers.onRotateHandlePointerDown}
+          showCornerHitTargets={true}
+          onCornerPointerDown={axiBox.handlers.onCornerPointerDown}
         />
       </svg>
     );
@@ -101,9 +114,12 @@ function FOVOverlay({ plane, size }: { plane: Plane, size: { w: number, h: numbe
           lineStyle="solid"
           showReferenceLine={true}
           referenceLineT={0.9}
+          circleMarkerT={0.5}
           rotateHandleAt="bl"
           onBodyPointerDown={corBox.handlers.onBodyPointerDown}
           onRotateHandlePointerDown={corBox.handlers.onRotateHandlePointerDown}
+          showCornerHitTargets={true}
+          onCornerPointerDown={corBox.handlers.onCornerPointerDown}
         />
       </svg>
     );
@@ -116,8 +132,8 @@ function FOVOverlay({ plane, size }: { plane: Plane, size: { w: number, h: numbe
       onPointerUp={() => { sagBox1.svgRootProps.onPointerUp(); sagBox2.svgRootProps.onPointerUp(); }}
       onPointerLeave={() => { sagBox1.svgRootProps.onPointerLeave(); sagBox2.svgRootProps.onPointerLeave(); }}
     >
-      <FOVPlanningBox corners={sagBox1.corners} hasImage={hasImage} lineStyle="dashed" showReferenceLine={false} onBodyPointerDown={sagBox1.handlers.onBodyPointerDown} onRotateHandlePointerDown={sagBox1.handlers.onRotateHandlePointerDown} />
-      <FOVPlanningBox corners={sagBox2.corners} hasImage={hasImage} lineStyle="dashed" showReferenceLine={false} onBodyPointerDown={sagBox2.handlers.onBodyPointerDown} onRotateHandlePointerDown={sagBox2.handlers.onRotateHandlePointerDown} />
+      <FOVPlanningBox corners={sagBox1.corners} hasImage={hasImage} lineStyle="dashed" showReferenceLine={false} onBodyPointerDown={sagBox1.handlers.onBodyPointerDown} onRotateHandlePointerDown={sagBox1.handlers.onRotateHandlePointerDown} showCornerHitTargets={true} onCornerPointerDown={sagBox1.handlers.onCornerPointerDown} />
+      <FOVPlanningBox corners={sagBox2.corners} hasImage={hasImage} lineStyle="dashed" showReferenceLine={false} onBodyPointerDown={sagBox2.handlers.onBodyPointerDown} onRotateHandlePointerDown={sagBox2.handlers.onRotateHandlePointerDown} showCornerHitTargets={true} onCornerPointerDown={sagBox2.handlers.onCornerPointerDown} />
     </svg>
   );
 }

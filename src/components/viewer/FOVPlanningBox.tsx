@@ -28,6 +28,8 @@ interface FOVPlanningBoxProps {
   /** pointer handlers from useFOVBoxController — omit for a static, non-interactive box */
   onBodyPointerDown?: (e: React.PointerEvent<SVGElement>) => void;
   onRotateHandlePointerDown?: (e: React.PointerEvent<SVGElement>) => void;
+  showCornerHitTargets?: boolean;
+  onCornerPointerDown?: (corner: Corner) => (e: React.PointerEvent<SVGElement>) => void;
 }
 
 const lerp = (a: Point, b: Point, t: number): Point => ({
@@ -70,6 +72,8 @@ export default function FOVPlanningBox({
   strokeWidth = 1.25,
   onBodyPointerDown,
   onRotateHandlePointerDown,
+  showCornerHitTargets = false,
+  onCornerPointerDown,
 }: FOVPlanningBoxProps) {
   if (!hasImage) return null;
 
@@ -123,6 +127,23 @@ export default function FOVPlanningBox({
       {rotateHandleAt !== "none" && (
         <g onPointerDown={onRotateHandlePointerDown}>
           <RotateArrow corner={rotateHandleAt} at={cornerPoint[rotateHandleAt]} color={color} />
+        </g>
+      )}
+
+      {showCornerHitTargets && onCornerPointerDown && (
+        <g>
+          {(["tl", "tr", "bl", "br"] as Corner[]).map((corner) => (
+            <rect
+              key={corner}
+              x={cornerPoint[corner].x - 6}
+              y={cornerPoint[corner].y - 6}
+              width={12}
+              height={12}
+              fill="transparent"
+              style={{ pointerEvents: "all", cursor: "nwse-resize" }}
+              onPointerDown={onCornerPointerDown(corner)}
+            />
+          ))}
         </g>
       )}
     </g>

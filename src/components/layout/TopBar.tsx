@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { useWorkstationStore } from "@/store/workstationStore";
 import { toast } from "@/lib/toast";
 import {
@@ -13,6 +13,185 @@ import {
   loadExamFromCloud,
   type CloudExamMeta,
 } from "@/lib/examPersistence";
+
+const PROTOCOL_TREE = [
+  {
+    category: 'Brain',
+    items: ['Routine Brain', 'Acute Stroke', 'Tumor Follow-up', 'MS Monitoring', 'Angiography']
+  },
+  {
+    category: 'Spine',
+    items: ['Cervical Routine', 'Thoracic Routine', 'Lumbar Routine', 'Whole Spine']
+  },
+  {
+    category: 'Knee',
+    items: ['Routine Knee', 'Meniscus Tear', 'Ligament Injury', 'Cartilage Assessment']
+  },
+  {
+    category: 'Shoulder',
+    items: ['Routine Shoulder', 'Rotator Cuff', 'Instability', 'MR Arthrogram']
+  },
+  {
+    category: 'Abdomen',
+    items: ['Routine Abdomen', 'Liver Lesion', 'MRCP', 'Kidneys']
+  },
+  {
+    category: 'Pelvis',
+    items: ['Routine Pelvis', 'Prostate', 'Rectum', 'Female Pelvis']
+  }
+];
+
+function ProtocolSelectorPopup({ onClose, onSelect }: { onClose: () => void, onSelect: (val: string) => void }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(['Brain']));
+  const [focusedIndex, setFocusedIndex] = useState(0);
+
+  const visibleItems = useMemo(() => {
+    const arr: { type: 'cat' | 'item'; id: string; label: string; cat?: string }[] = [];
+    PROTOCOL_TREE.forEach(c => {
+      arr.push({ type: 'cat', id: c.category, label: c.category });
+      if (expanded.has(c.category)) {
+        c.items.forEach(i => {
+          arr.push({ type: 'item', id: i, label: i, cat: c.category });
+        });
+      }
+    });
+    return arr;
+  }, [expanded]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFocusedIndex(i => Math.min(i + 1, visibleItems.length - 1));
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedIndex(i => Math.max(i - 1, 0));
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const item = visibleItems[focusedIndex];
+        if (item.type === 'cat' && !expanded.has(item.id)) {
+          setExpanded(prev => new Set(prev).add(item.id));
+        }
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const item = visibleItems[focusedIndex];
+        if (item.type === 'cat' && expanded.has(item.id)) {
+          const next = new Set(expanded);
+          next.delete(item.id);
+          setExpanded(next);
+        } else if (item.type === 'item') {
+          const pIdx = visibleItems.findIndex(v => v.id === item.cat);
+          if (pIdx !== -1) setFocusedIndex(pIdx);
+        }
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const item = visibleItems[focusedIndex];
+        if (item.type === 'cat') {
+          setExpanded(prev => {
+            const next = new Set(prev);
+            if (next.has(item.id)) next.delete(item.id);
+            else next.add(item.id);
+            return next;
+          });
+        } else {
+          onSelect(`${item.cat} Protocol — ${item.label}`);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [visibleItems, focusedIndex, expanded, onClose, onSelect]);
+
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={onClose} />
+      <div
+        style={{
+          position: 'absolute',
+          top: '100%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          marginTop: '6px',
+          width: '240px',
+          maxHeight: '300px',
+          background: '#0a1220',
+          border: '1px solid #1e293b',
+          borderRadius: '4px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.8)',
+          zIndex: 999,
+          overflowY: 'auto',
+          padding: '4px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px',
+        }}
+      >
+        {visibleItems.map((item, idx) => {
+          const isFocused = idx === focusedIndex;
+          if (item.type === 'cat') {
+            const isExp = expanded.has(item.id);
+            return (
+              <div
+                key={item.id}
+                onMouseEnter={() => setFocusedIndex(idx)}
+                onClick={() => {
+                  setExpanded(prev => {
+                    const next = new Set(prev);
+                    if (next.has(item.id)) next.delete(item.id);
+                    else next.add(item.id);
+                    return next;
+                  });
+                }}
+                style={{
+                  padding: '4px 8px',
+                  background: isFocused ? '#1e293b' : 'transparent',
+                  color: isFocused ? '#e2e8f0' : '#94a3b8',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  borderRadius: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span style={{ fontSize: '8px' }}>{isExp ? '▼' : '▶'}</span>
+                {item.label}
+              </div>
+            );
+          } else {
+            return (
+              <div
+                key={item.id}
+                onMouseEnter={() => setFocusedIndex(idx)}
+                onClick={() => onSelect(`${item.cat} Protocol — ${item.label}`)}
+                style={{
+                  padding: '4px 8px 4px 22px',
+                  background: isFocused ? '#0f2d50' : 'transparent',
+                  color: isFocused ? '#22d3ee' : '#64748b',
+                  fontSize: '9.5px',
+                  cursor: 'pointer',
+                  borderRadius: '2px',
+                  borderLeft: isFocused ? '2px solid #22d3ee' : '2px solid transparent',
+                }}
+              >
+                {item.label}
+              </div>
+            );
+          }
+        })}
+      </div>
+    </>
+  );
+}
 
 export default function TopBar() {
   const {
@@ -43,6 +222,7 @@ export default function TopBar() {
   const [showCloudList, setShowCloudList] = useState(false);
   const [cloudExams, setCloudExams] = useState<CloudExamMeta[]>([]);
   const [loadingCloud, setLoadingCloud] = useState(false);
+  const [showProtocolSelector, setShowProtocolSelector] = useState(false);
 
   const [time, setTime] = useState("");
 
@@ -293,9 +473,37 @@ export default function TopBar() {
             {patient.dob}
           </span>
           <span style={{ color: "#334155" }}>|</span>
-          <span style={{ color: "#64748b", fontSize: "9px" }}>
-            {patient.study.slice(0, 28)}
-          </span>
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setShowProtocolSelector(!showProtocolSelector)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#64748b",
+                fontSize: "9px",
+                cursor: "pointer",
+                fontFamily: "Inter,sans-serif",
+                padding: "2px 4px",
+                outline: "none",
+                borderRadius: "2px",
+                transition: "color 0.1s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#e2e8f0")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#64748b")}
+            >
+              {patient.study.slice(0, 28)} ▾
+            </button>
+            {showProtocolSelector && (
+              <ProtocolSelectorPopup
+                onClose={() => setShowProtocolSelector(false)}
+                onSelect={(study) => {
+                  useWorkstationStore.getState().setPatient({ study });
+                  setShowProtocolSelector(false);
+                  toast(`Protocol switched to: ${study}`, "success");
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
 
