@@ -1,166 +1,249 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import { useEffect } from 'react';
-import { useWorkstationStore } from '@/store/workstationStore';
-import StatusBar from '@/components/layout/StatusBar';
+import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/dist/ScrollTrigger';
 
-// Dynamic imports to avoid SSR issues with Canvas/Three.js
-const TopBar        = dynamic(() => import('@/components/layout/TopBar'),        { ssr: false });
-const LeftSidebar   = dynamic(() => import('@/components/layout/LeftSidebar'),   { ssr: false });
-const ViewportGrid  = dynamic(() => import('@/components/viewer/ViewportGrid'),  { ssr: false });
-const RightSidebar  = dynamic(() => import('@/components/layout/RightSidebar'),  { ssr: false });
-const ProtocolQueue = dynamic(() => import('@/components/queue/ProtocolQueue'),  { ssr: false });
-const ParameterPanel= dynamic(() => import('@/components/params/ParameterPanel'),{ ssr: false });
-const HelpModal     = dynamic(() => import('@/components/help/HelpModal'),       { ssr: false });
-const PatientModal  = dynamic(() => import('@/components/patient/PatientModal'), { ssr: false });
-const PhysicsPanel  = dynamic(() => import('@/components/simulation/PhysicsPanel'),{ ssr: false });
-const LearningPanel = dynamic(() => import('@/components/learning/LearningPanel'),{ ssr: false });
-const AIAssistant   = dynamic(() => import('@/components/ai/AIAssistant'),       { ssr: false });
-const ImageImport   = dynamic(() => import('@/components/viewer/ImageImport'),   { ssr: false });
-const SplashScreen  = dynamic(() => import('@/components/layout/SplashScreen'),  { ssr: false });
+const FRAME_COUNT = 300;
+const FRAME_PREFIX = '/landing/frames/ezgif-frame-';
+const FRAME_EXT = '.jpg';
 
-export default function WorkstationPage() {
-  const {
-    leftCollapsed, rightCollapsed,
-    showHelp, showPatient, showPhysics, showLearning, showAI,
-    showImageImport, theme,
-  } = useWorkstationStore();
+function padZero(num: number, size = 3) {
+  let s = num + '';
+  while (s.length < size) s = '0' + s;
+  return s;
+}
 
-  // ── Apply theme class to document root ─────────────────────────────────────
+export default function LandingPage() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const sectionsRef = useRef<HTMLDivElement>(null);
+  const [loaded, setLoaded] = useState(false);
+  
+  // Keep images in a ref to avoid re-renders
+  const imagesRef = useRef<HTMLImageElement[]>([]);
+  
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
-
-  // ── Global keyboard shortcuts ──────────────────────────────────────────────
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return;
-      const state = useWorkstationStore.getState();
-
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); state.togglePatient(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); document.getElementById('global-file-input')?.click(); }
-      if (e.key === 'h' || e.key === 'H') state.toggleHelp();
-      if (e.key === 'p' || e.key === 'P') state.togglePhysics();
-      if (e.key === 'l' || e.key === 'L') state.toggleLearning();
-      if (e.key === 't' || e.key === 'T') state.toggleTheme();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // 1. Preload Images
+    let loadedCount = 0;
+    const imgs: HTMLImageElement[] = [];
+    
+    for (let i = 1; i <= FRAME_COUNT; i++) {
+      const img = new Image();
+      img.src = `${FRAME_PREFIX}${padZero(i)}${FRAME_EXT}`;
+      img.onload = () => {
+        loadedCount++;
+        if (loadedCount === FRAME_COUNT) {
+          setLoaded(true);
+        }
+      };
+      imgs.push(img);
+    }
+    imagesRef.current = imgs;
   }, []);
 
-  const isDark = theme !== 'light';
-  const bg = isDark ? '#04060a' : '#e8ecf5';
-  const border = isDark ? '#1e293b' : '#c5d0e0';
-  const queueBg = isDark ? '#111827' : '#dde4ef';
+  useEffect(() => {
+    if (!loaded || !canvasRef.current || !containerRef.current || !sectionsRef.current) return;
+
+    gsap.registerPlugin(ScrollTrigger);
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Handle Resize
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      renderFrame(frame.current);
+    };
+
+    const renderFrame = (index: number) => {
+      const img = imagesRef.current[Math.max(0, Math.min(FRAME_COUNT - 1, Math.round(index) - 1))];
+      if (!img || !ctx) return;
+      
+      // object-fit: cover equivalent for canvas
+      const canvasRatio = canvas.width / canvas.height;
+      const imgRatio = img.width / img.height;
+      
+      let renderWidth = canvas.width;
+      let renderHeight = canvas.height;
+      let renderX = 0;
+      let renderY = 0;
+
+      if (imgRatio > canvasRatio) {
+        // Image is wider than canvas
+        renderWidth = canvas.height * imgRatio;
+        renderX = (canvas.width - renderWidth) / 2;
+      } else {
+        // Image is taller than canvas
+        renderHeight = canvas.width / imgRatio;
+        renderY = (canvas.height - renderHeight) / 2;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, renderX, renderY, renderWidth, renderHeight);
+    };
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas(); // initial draw
+
+    // GSAP ScrollTrigger Sequence
+    const frame = { current: 1 };
+    
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: containerRef.current,
+        start: 'top top',
+        end: 'bottom bottom',
+        scrub: 1, // Smooth scrubbing
+      },
+    });
+
+    tl.to(frame, {
+      current: FRAME_COUNT,
+      snap: 'current',
+      ease: 'none',
+      onUpdate: () => renderFrame(frame.current),
+    });
+
+    // Animate text sections independently using scroll
+    const textSections = gsap.utils.toArray('.scroll-section');
+    textSections.forEach((section: any, i) => {
+      gsap.fromTo(
+        section,
+        { opacity: 0, y: 50 },
+        {
+          opacity: 1,
+          y: 0,
+          scrollTrigger: {
+            trigger: section,
+            start: 'top center+=200',
+            end: 'center center',
+            scrub: true,
+          },
+        }
+      );
+      
+      // Fade out on scroll up, unless it's the last section
+      if (i < textSections.length - 1) {
+        gsap.to(section, {
+          opacity: 0,
+          y: -50,
+          scrollTrigger: {
+            trigger: section,
+            start: 'center center',
+            end: 'bottom center-=200',
+            scrub: true,
+          }
+        });
+      }
+    });
+
+    return () => {
+      window.removeEventListener('resize', resizeCanvas);
+      ScrollTrigger.getAll().forEach((t) => t.kill());
+    };
+  }, [loaded]);
 
   return (
-    <>
-    <SplashScreen />
-    <div id="workstation" data-theme={theme} style={{
-      display: 'grid',
-      gridTemplateRows: '36px 1fr 260px 20px',
-      gridTemplateColumns: leftCollapsed ? '0px 1fr 212px' : '220px 1fr 212px',
-      height: '100vh',
-      width: '100vw',
-      overflow: 'hidden',
-      background: bg,
-      transition: 'grid-template-columns 0.2s ease',
-    }}>
-      {/* Top bar — full width */}
-      <div id="topbar" style={{ gridColumn: '1 / -1', gridRow: '1', borderBottom: `1px solid ${border}`, zIndex: 50 }}>
-        <TopBar />
+    <div ref={containerRef} className="bg-black text-white min-h-screen relative font-sans selection:bg-blue-500 selection:text-white" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+      
+      {/* Canvas Container Pinned */}
+      <div className="sticky top-0 left-0 w-full h-screen overflow-hidden z-0">
+        {!loaded && (
+          <div className="absolute inset-0 flex items-center justify-center text-blue-400 font-semibold tracking-widest text-sm">
+            INITIALIZING SYSTEM...
+          </div>
+        )}
+        <canvas 
+          ref={canvasRef} 
+          className="w-full h-full opacity-60 mix-blend-screen"
+          style={{ 
+            filter: 'drop-shadow(0 0 30px rgba(59, 130, 246, 0.3)) hue-rotate(190deg) saturate(1.5)',
+          }}
+        />
+        {/* Subtle radial gradient overlay for premium depth */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/90 pointer-events-none" />
       </div>
 
-      {/* Left sidebar */}
-      {!leftCollapsed && (
-        <div id="leftsb" style={{ gridColumn: '1', gridRow: '2', borderRight: `1px solid ${border}`, overflow: 'hidden' }}>
-          <LeftSidebar />
-        </div>
-      )}
+      {/* Content Overlay */}
+      <div ref={sectionsRef} className="relative z-10 w-full" style={{ marginTop: '-100vh' }}>
+        
+        {/* Sections for scrolling */}
+        {/* We use highly spaced out sections to provide scrolling room for the canvas sequence */}
+        
+        <section className="h-[150vh] flex flex-col justify-center items-center text-center px-6">
+          <div className="scroll-section">
+            <h1 className="text-6xl md:text-8xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-blue-200">
+              MRI Workstation Pro
+            </h1>
+            <p className="mt-6 text-xl md:text-3xl text-gray-400 max-w-2xl mx-auto font-light tracking-wide">
+              The next generation of clinical imaging. Unprecedented clarity.
+            </p>
+          </div>
+        </section>
 
-      {/* Main viewport area */}
-      <div id="mainvp" style={{
-        gridColumn: leftCollapsed ? '1 / 3' : '2',
-        gridRow: '2',
-        overflow: 'hidden',
-        position: 'relative',
-      }}>
-        <ViewportGrid />
+        <section className="h-[150vh] flex flex-col justify-center items-center text-center px-6">
+          <div className="scroll-section">
+            <h2 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
+              AI-assisted Planning
+            </h2>
+            <p className="text-xl md:text-2xl text-blue-300 max-w-3xl mx-auto font-light leading-relaxed">
+              Automated slice positioning. intelligent protocol queuing. Millimeter precision driven by neural networks.
+            </p>
+          </div>
+        </section>
+
+        <section className="h-[150vh] flex flex-col justify-center items-center text-center px-6">
+          <div className="scroll-section">
+            <h2 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-500">
+              Advanced Visualization
+            </h2>
+            <p className="text-xl md:text-2xl text-gray-400 max-w-2xl mx-auto font-light leading-relaxed">
+              Real-time multi-planar reconstruction. Fluid volumetric rendering powered by custom WebGL architecture.
+            </p>
+          </div>
+        </section>
+
+        <section className="h-[150vh] flex flex-col justify-center items-center text-center px-6">
+          <div className="scroll-section">
+            <h2 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
+              Clinical Workflow
+            </h2>
+            <p className="text-xl md:text-2xl text-gray-300 max-w-2xl mx-auto font-light leading-relaxed">
+              Designed for speed. Engineered for zero friction. Seamlessly integrates with your daily radiological routine.
+            </p>
+          </div>
+        </section>
+
+        <section className="h-[150vh] flex flex-col justify-center items-center text-center px-6">
+          <div className="scroll-section">
+            <h2 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
+              Research & Education
+            </h2>
+            <p className="text-xl md:text-2xl text-blue-200 max-w-2xl mx-auto font-light leading-relaxed">
+              Simulate sequences. Understand physics in real-time. The ultimate interactive training tool for technologists.
+            </p>
+          </div>
+        </section>
+
+        <section className="h-[100vh] flex flex-col justify-center items-center text-center px-6 pb-32">
+          <div className="scroll-section">
+            <h2 className="text-6xl md:text-8xl font-bold tracking-tighter mb-12">
+              Ready to explore?
+            </h2>
+            <Link href="/workstation" className="group relative inline-flex items-center justify-center px-10 py-5 text-xl font-medium tracking-wide text-white transition-all duration-300 ease-out bg-blue-600 rounded-full hover:bg-blue-500 hover:scale-105 hover:shadow-[0_0_40px_rgba(37,99,235,0.6)]">
+              Start Workstation
+              <svg className="w-6 h-6 ml-3 transition-transform duration-300 ease-out group-hover:translate-x-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </Link>
+          </div>
+        </section>
+
       </div>
-
-      {/* Right sidebar */}
-      {!rightCollapsed && (
-        <div id="rightsb" style={{ gridColumn: '3', gridRow: '2', borderLeft: `1px solid ${border}`, overflow: 'hidden' }}>
-          <RightSidebar />
-        </div>
-      )}
-
-      {/* Protocol Queue + Parameters — bottom strip */}
-      <div id="queue" style={{
-        gridColumn: '1 / -1',
-        gridRow: '3',
-        borderTop: `2px solid ${border}`,
-        display: 'flex',
-        background: queueBg,
-        overflow: 'hidden',
-      }}>
-        <ProtocolQueue />
-        <div style={{ width: '1px', background: border, flexShrink: 0 }} />
-        <ParameterPanel />
-      </div>
-
-      {/* Status bar */}
-      <div id="statusbar" style={{ gridColumn: '1 / -1', gridRow: '4', borderTop: `1px solid ${border}`, zIndex: 40 }}>
-        <StatusBar />
-      </div>
-
-      {/* Modals and panels */}
-      {showHelp     && <HelpModal />}
-      {showPatient  && <PatientModal />}
-      {showPhysics  && <PhysicsPanel />}
-      {showLearning && <LearningPanel />}
-      {showAI       && <AIAssistant />}
-      {showImageImport && <ImageImport />}
-
-      {/* Hidden global file input for Ctrl+O */}
-      <input
-        id="global-file-input"
-        type="file"
-        accept=".jpg,.jpeg,.png,.bmp,.tif,.tiff,.webp,.mp4,video/mp4"
-        multiple
-        style={{ display: 'none' }}
-        onChange={async e => {
-          const files = Array.from(e.target.files ?? []);
-          if (files.length === 0) return;
-          const store = useWorkstationStore.getState();
-
-          // Single file → load into all 3 viewports
-          if (files.length === 1) {
-            const file = files[0]!;
-            const reader = new FileReader();
-            reader.onload = ev => {
-              store.setImageAll(ev.target?.result as string);
-              store.setStatusMsg(`Loaded: ${file.name}`);
-            };
-            reader.readAsDataURL(file);
-          } else {
-            // Multiple files → assign to planes
-            const planes: ('axial' | 'coronal' | 'sagittal')[] = ['axial', 'coronal', 'sagittal'];
-            files.slice(0, 3).forEach((file, i) => {
-              const reader = new FileReader();
-              reader.onload = ev => {
-                store.setImage(planes[i]!, ev.target?.result as string);
-                store.setStatusMsg(`Loaded: ${file.name}`);
-              };
-              reader.readAsDataURL(file);
-            });
-          }
-          e.target.value = '';
-        }}
-      />
     </div>
-    </>
   );
 }
