@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://mri-workstation.vercel.app'),
   title: 'MRI Pro Workstation',
   description: 'An interactive educational MRI scanner simulator inspired by clinical workstations. PLAN • SCAN • LEARN',
   keywords: ['MRI simulator', 'radiology education', 'medical imaging', 'MRI physics', 'DICOM viewer'],
