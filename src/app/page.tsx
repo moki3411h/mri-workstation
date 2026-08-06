@@ -2,9 +2,13 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { gsap } from 'gsap';
+import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useGSAP } from '@gsap/react';
 
+if (typeof window !== 'undefined') {
+  gsap.registerPlugin(ScrollTrigger, useGSAP);
+}
 const FRAME_COUNT = 300;
 const FRAME_PREFIX = '/landing/frames/ezgif-frame-';
 const FRAME_EXT = '.jpg';
@@ -43,10 +47,8 @@ export default function LandingPage() {
     imagesRef.current = imgs;
   }, []);
 
-  useEffect(() => {
+  useGSAP(() => {
     if (!loaded || !canvasRef.current || !containerRef.current || !sectionsRef.current) return;
-
-    gsap.registerPlugin(ScrollTrigger);
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -63,7 +65,6 @@ export default function LandingPage() {
       const img = imagesRef.current[Math.max(0, Math.min(FRAME_COUNT - 1, Math.round(index) - 1))];
       if (!img || !ctx) return;
       
-      // object-fit: cover equivalent for canvas
       const canvasRatio = canvas.width / canvas.height;
       const imgRatio = img.width / img.height;
       
@@ -73,11 +74,9 @@ export default function LandingPage() {
       let renderY = 0;
 
       if (imgRatio > canvasRatio) {
-        // Image is wider than canvas
         renderWidth = canvas.height * imgRatio;
         renderX = (canvas.width - renderWidth) / 2;
       } else {
-        // Image is taller than canvas
         renderHeight = canvas.width / imgRatio;
         renderY = (canvas.height - renderHeight) / 2;
       }
@@ -126,7 +125,6 @@ export default function LandingPage() {
         }
       );
       
-      // Fade out on scroll up, unless it's the last section
       if (i < textSections.length - 1) {
         gsap.to(section, {
           opacity: 0,
@@ -143,9 +141,8 @@ export default function LandingPage() {
 
     return () => {
       window.removeEventListener('resize', resizeCanvas);
-      ScrollTrigger.getAll().forEach((t) => t.kill());
     };
-  }, [loaded]);
+  }, { dependencies: [loaded], scope: containerRef });
 
   return (
     <div ref={containerRef} className="bg-black text-white min-h-screen relative font-sans selection:bg-blue-500 selection:text-white" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
