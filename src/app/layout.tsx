@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://mri-workstation.vercel.app'),
-  title: 'MRI Pro Workstation',
-  description: 'An interactive educational MRI scanner simulator inspired by clinical workstations. PLAN • SCAN • LEARN',
+  metadataBase: new URL('https://mriproworkstation.com'),
+  title: 'MRI Pro Workstation — Plan. Scan. Learn.',
+  description: 'A browser-based educational MRI workstation for slice planning, acquisition simulation, physics learning, and multi-planar image review.',
   keywords: ['MRI simulator', 'radiology education', 'medical imaging', 'MRI physics', 'DICOM viewer'],
   authors: [{ name: 'MRI Pro Workstation' }],
   icons: {
@@ -19,9 +19,9 @@ export const metadata: Metadata = {
   },
   manifest: '/site.webmanifest',
   openGraph: {
-    title: 'MRI Pro Workstation',
-    description: 'PLAN • SCAN • LEARN',
-    url: 'https://mri-workstation.vercel.app',
+    title: 'MRI Pro Workstation — Plan. Scan. Learn.',
+    description: 'Professional MRI workflow simulation for education and training.',
+    url: 'https://mriproworkstation.com',
     images: [
       {
         url: '/logo-full.png',
