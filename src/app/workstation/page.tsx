@@ -18,7 +18,6 @@ const PhysicsPanel  = dynamic(() => import('@/components/simulation/PhysicsPanel
 const LearningPanel = dynamic(() => import('@/components/learning/LearningPanel'),{ ssr: false });
 const AIAssistant   = dynamic(() => import('@/components/ai/AIAssistant'),       { ssr: false });
 const ImageImport   = dynamic(() => import('@/components/viewer/ImageImport'),   { ssr: false });
-const SplashScreen  = dynamic(() => import('@/components/layout/SplashScreen'),  { ssr: false });
 
 export default function WorkstationPage() {
   const {
@@ -56,8 +55,6 @@ export default function WorkstationPage() {
   const queueBg = isDark ? '#111827' : '#dde4ef';
 
   return (
-    <>
-    <SplashScreen />
     <div id="workstation" data-theme={theme} style={{
       display: 'grid',
       gridTemplateRows: '36px 1fr 260px 20px',
@@ -161,6 +158,5 @@ export default function WorkstationPage() {
         }}
       />
     </div>
-    </>
   );
 }
