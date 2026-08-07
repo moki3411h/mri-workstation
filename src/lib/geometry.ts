@@ -18,6 +18,43 @@ export interface Point3D { x: number; y: number; z: number; }
 /** Scale factor: how many mm fits across the viewport */
 export const VIEW_FOV_MM = 300;
 
+/** Siemens-style planning colours and protocol angle tolerance. */
+export const PLANNING_COLOR = '#d8df31';
+export const PLANNING_WARNING_COLOR = '#ff4d57';
+export const MAX_PLANNING_ANGLE_DEG = 12;
+
+export interface PlanningAngleStatus {
+  isValid: boolean;
+  deviation: number;
+  tolerance: number;
+  label: string;
+}
+
+function normalizeAngle(angle: number): number {
+  return ((angle + 180) % 360 + 360) % 360 - 180;
+}
+
+/**
+ * Checks whether the prescription remains inside the teaching protocol's
+ * allowable obliquity. All three rotation controls participate so the same
+ * warning is shown no matter which viewport was used to tilt the slab.
+ */
+export function getPlanningAngleStatus(plan: PlanningObject): PlanningAngleStatus {
+  const deviation = Math.max(
+    Math.abs(normalizeAngle(plan.rotX)),
+    Math.abs(normalizeAngle(plan.rotY)),
+    Math.abs(normalizeAngle(plan.rotZ)),
+  );
+  const isValid = deviation <= MAX_PLANNING_ANGLE_DEG;
+
+  return {
+    isValid,
+    deviation,
+    tolerance: MAX_PLANNING_ANGLE_DEG,
+    label: isValid ? 'ANGLE OK' : 'ANGLE OUT OF RANGE',
+  };
+}
+
 // ── 3x3 Matrix Math ────────────────────────────────────────────────────────
 export type Matrix3x3 = [
   number, number, number,
@@ -226,6 +263,38 @@ export function getSliceCenters3D(plan: PlanningObject): Point3D[] {
   return centers;
 }
 
+function getInPlaneAxes(plan: PlanningObject): {
+  read: Point3D;
+  phase: Point3D;
+} {
+  if (plan.orientation === 'axial') {
+    return { read: { x: 1, y: 0, z: 0 }, phase: { x: 0, y: 1, z: 0 } };
+  }
+  if (plan.orientation === 'coronal') {
+    return { read: { x: 1, y: 0, z: 0 }, phase: { x: 0, y: 0, z: 1 } };
+  }
+  return { read: { x: 0, y: 1, z: 0 }, phase: { x: 0, y: 0, z: 1 } };
+}
+
+/** Select the FoV axis that is visible edge-on in an orthogonal viewport. */
+function getProjectedInPlaneAxis(plan: PlanningObject, plane: Plane, W: number, H: number): {
+  direction: Point3D;
+  span: number;
+} {
+  const axes = getInPlaneAxes(plan);
+  const read = applyPlanningRotation(axes.read, plan);
+  const phase = applyPlanningRotation(axes.phase, plan);
+  const origin = project3Dto2D({ x: 0, y: 0, z: 0 }, plane, W, H);
+  const projectedRead = project3Dto2D(read, plane, W, H);
+  const projectedPhase = project3Dto2D(phase, plane, W, H);
+  const readLength = Math.hypot(projectedRead.x - origin.x, projectedRead.y - origin.y) * plan.fovRead;
+  const phaseLength = Math.hypot(projectedPhase.x - origin.x, projectedPhase.y - origin.y) * plan.fovPhase;
+
+  return readLength >= phaseLength
+    ? { direction: read, span: plan.fovRead }
+    : { direction: phase, span: plan.fovPhase };
+}
+
 // ── 2D Handle Calculation ──────────────────────────────────────────────────
 
 export interface Handles2D {
@@ -247,16 +316,11 @@ export function getFovHandles2D(plan: PlanningObject, plane: Plane, W: number, H
     return computeHandlesFromQuad([tl, tr, br, bl]);
   } else {
     const center = { x: plan.centerX, y: plan.centerY, z: plan.centerZ };
-    
-    let readDirLocal: Point3D;
-    if (plan.orientation === 'axial') readDirLocal = { x: 1, y: 0, z: 0 };
-    else if (plan.orientation === 'coronal') readDirLocal = { x: 1, y: 0, z: 0 };
-    else readDirLocal = { x: 0, y: 1, z: 0 };
-    
-    const readDir = applyPlanningRotation(readDirLocal, plan);
+    const projectedAxis = getProjectedInPlaneAxis(plan, plane, W, H);
+    const readDir = projectedAxis.direction;
     const normalDir = getSliceNormal(plan);
-    
-    const hw = plan.fovRead / 2;
+
+    const hw = projectedAxis.span / 2;
     const hd = getSlabDepth(plan) / 2;
     
     // Top-left is positive normal, negative read
@@ -293,8 +357,13 @@ function computeHandlesFromQuad(corners: [Point2D, Point2D, Point2D, Point2D]): 
 const HANDLE_RADIUS = 12;
 
 export function hitTestFov(px: number, py: number, handles: Handles2D): string | null {
-  // Hit-test z-order: Rotation > Corners > Edges > Box Interior
-  if (Math.hypot(px - handles.rot.x, py - handles.rot.y) < HANDLE_RADIUS + 2) return 'rotate';
+  // Siemens-style rotation affordance: hover just outside any corner. The
+  // zone stays invisible so the prescription is not covered by UI chrome.
+  const corners = [handles.tl, handles.tr, handles.br, handles.bl];
+  for (const corner of corners) {
+    const distance = Math.hypot(px - corner.x, py - corner.y);
+    if (distance > HANDLE_RADIUS && distance < HANDLE_RADIUS + 15) return 'rotate';
+  }
 
   if (Math.hypot(px - handles.tl.x, py - handles.tl.y) < HANDLE_RADIUS) return 'tl';
   if (Math.hypot(px - handles.tr.x, py - handles.tr.y) < HANDLE_RADIUS) return 'tr';
@@ -332,19 +401,11 @@ export function projectSlicePolygons(plan: PlanningObject, plane: Plane, W: numb
   const sliceCenters = getSliceCenters3D(plan);
   if (sliceCenters.length === 0) return [];
 
-  const fovWidth = plan.fovRead;
+  const projectedAxis = getProjectedInPlaneAxis(plan, plane, W, H);
+  const fovWidth = projectedAxis.span;
   const hw = fovWidth / 2;
   const ht = plan.sliceThickness / 2; // half thickness
-
-  let readDir: Point3D;
-  if (plan.orientation === 'axial') {
-    readDir = { x: 1, y: 0, z: 0 };
-  } else if (plan.orientation === 'coronal') {
-    readDir = { x: 1, y: 0, z: 0 };
-  } else {
-    readDir = { x: 0, y: 1, z: 0 };
-  }
-  const rotatedReadDir = applyPlanningRotation(readDir, plan);
+  const rotatedReadDir = projectedAxis.direction;
   const normal = getSliceNormal(plan);
 
   const polygons: SlicePolygon[] = [];

@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { SEQUENCES, type Sequence, calculateTA, formatTime } from '@/lib/scanEngine';
 import { calcSNR, getContrastType, calcResolution } from '@/lib/physics';
 import { eulerToMatrix } from '@/lib/geometry';
+import type { ProtocolImageSeries } from '@/lib/protocolSeries';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -120,6 +121,7 @@ export interface WorkstationStore {
 
   // Images (data URLs) — same image shown in all viewports for now
   images:   Record<Plane, string | null>;
+  imageSeries: Record<Plane, ProtocolImageSeries | null>;
 
   // Overlay toggles
   show: {
@@ -168,6 +170,7 @@ export interface WorkstationStore {
   setActiveVP:      (plane: Plane) => void;
   setImage:         (plane: Plane, url: string | null) => void;
   setImageAll:      (url: string) => void;
+  setImageSeries:   (series: ProtocolImageSeries) => void;
   setShow:          (key: keyof WorkstationStore['show'], value: boolean) => void;
   setPatient:       (patient: Partial<PatientState>) => void;
   setSafety:        (safety: Partial<SafetyState>) => void;
@@ -247,6 +250,31 @@ function computePhysics(p: ParamsState, plan: PlanningObject) {
   return { calcTA: formatTime(taSec), calcSNR: snr, calcContrast: contrast, calcRes: res, taSec };
 }
 
+function clampFinite(value: number, minimum: number, maximum: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+/** Keep direct inputs, sliders, wheel gestures, and viewport drags in sync. */
+function sanitizePlanning(plan: PlanningObject, fallback: PlanningObject): PlanningObject {
+  const sliceThickness = clampFinite(plan.sliceThickness, 0.5, 20, fallback.sliceThickness);
+  return {
+    ...plan,
+    centerX: clampFinite(plan.centerX, -150, 150, fallback.centerX),
+    centerY: clampFinite(plan.centerY, -150, 150, fallback.centerY),
+    centerZ: clampFinite(plan.centerZ, -150, 150, fallback.centerZ),
+    rotX: clampFinite(plan.rotX, -180, 180, fallback.rotX),
+    rotY: clampFinite(plan.rotY, -180, 180, fallback.rotY),
+    rotZ: clampFinite(plan.rotZ, -180, 180, fallback.rotZ),
+    fovRead: clampFinite(plan.fovRead, 80, 500, fallback.fovRead),
+    fovPhase: clampFinite(plan.fovPhase, 80, 500, fallback.fovPhase),
+    sliceCount: Math.round(clampFinite(plan.sliceCount, 1, 200, fallback.sliceCount)),
+    sliceThickness,
+    // Prevent a negative gap from inverting the stack direction.
+    sliceGap: clampFinite(plan.sliceGap, -sliceThickness + 0.1, 20, fallback.sliceGap),
+  };
+}
+
 // ── Store ──────────────────────────────────────────────────
 
 export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
@@ -263,6 +291,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   wl:       { coronal: { ...defaultWL }, sagittal: { ...defaultWL }, axial: { ...defaultWL } },
   activeVP: 'axial',
   images:   { coronal: null, sagittal: null, axial: null },
+  imageSeries: { coronal: null, sagittal: null, axial: null },
 
   show: { fov: true, xhair: true, labels: true, ruler: false, sliceMarkers: false, referenceLines: true, measurements: true, kspace: false },
 
@@ -303,7 +332,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   },
 
   startScan: () => {
-    const { sequences, scan } = get();
+    const { sequences, scan, selectedSeqId } = get();
     if (scan.running && !scan.paused) return;
 
     if (scan.paused && scan.seqId) {
@@ -311,7 +340,10 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
       return;
     }
 
-    const seq = sequences.find(s => s.status === 'active' || s.status === 'pending');
+    const selected = sequences.find(
+      s => s.id === selectedSeqId && (s.status === 'active' || s.status === 'pending'),
+    );
+    const seq = selected ?? sequences.find(s => s.status === 'active' || s.status === 'pending');
     if (!seq) { set({ statusMsg: 'All sequences completed!' }); return; }
 
     const newSeqs = sequences.map(s =>
@@ -387,7 +419,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
 
   setPlanning: (p) => {
     const oldPlan = get().planning;
-    const newPlan = { ...oldPlan, ...p };
+    const newPlan = sanitizePlanning({ ...oldPlan, ...p }, oldPlan);
     
     if (p.rotX !== undefined || p.rotY !== undefined || p.rotZ !== undefined) {
       newPlan.rotationMatrix = eulerToMatrix(newPlan.rotX, newPlan.rotY, newPlan.rotZ);
@@ -418,16 +450,44 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
   setImage: (plane, url) => {
     set(s => {
       const newImages = { ...s.images, [plane]: url };
+      const newSeries = { ...s.imageSeries, [plane]: null };
       const hasAny = Object.values(newImages).some(v => v !== null);
-      return { images: newImages, planningActive: hasAny };
+      return { images: newImages, imageSeries: newSeries, planningActive: hasAny };
     });
   },
 
   setImageAll: (url) => {
     set({
       images: { coronal: url, sagittal: url, axial: url },
+      imageSeries: { coronal: null, sagittal: null, axial: null },
       planningActive: true,
       statusMsg: 'Image loaded — Planning active',
+    });
+  },
+
+  setImageSeries: (series) => {
+    const state = get();
+    const sequence = state.sequences.find(item => item.id === series.sequenceId);
+    const nextParams = sequence
+      ? { ...state.params, tr: sequence.tr, te: sequence.te, ti: sequence.ti, flipAngle: sequence.flipAngle }
+      : state.params;
+    const nextPlanning = sanitizePlanning({
+      ...state.planning,
+      orientation: series.plane,
+      sliceCount: series.frameCount,
+      sliceThickness: series.sliceThickness || state.planning.sliceThickness,
+    }, state.planning);
+    const computed = computePhysics(nextParams, nextPlanning);
+    set({
+      selectedSeqId: series.sequenceId,
+      params: nextParams,
+      planning: nextPlanning,
+      images: { ...state.images, [series.plane]: series.thumbnail },
+      imageSeries: { ...state.imageSeries, [series.plane]: series },
+      activeVP: series.plane,
+      planningActive: true,
+      statusMsg: `${series.name}: ${series.frameCount} DICOM images loaded into ${series.plane.toUpperCase()} planning`,
+      ...computed,
     });
   },
 
@@ -492,11 +552,11 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     safety:    snap.safety,
     sequences: snap.sequences,
     params:    snap.params,
-    planning:  (snap as any).planning ?? { ...defaultPlanning },
+    planning:  snap.planning ?? { ...defaultPlanning },
     wl:        snap.wl,
     show:      snap.show,
     statusMsg: `Exam loaded: ${snap.patient.name} — ${new Date(snap.savedAt).toLocaleString()}`,
-    ...computePhysics(snap.params, (snap as any).planning ?? defaultPlanning),
+    ...computePhysics(snap.params, snap.planning ?? defaultPlanning),
   }),
 
   toggleCine: () => set(s => ({ cineMode: !s.cineMode, statusMsg: !s.cineMode ? 'Cine playback started' : 'Cine playback stopped' })),

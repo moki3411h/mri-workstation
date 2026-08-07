@@ -1,138 +1,96 @@
-import React, { useRef, useCallback, useEffect } from 'react';
-import { useWorkstationStore, type PlanningObject } from '@/store/workstationStore';
-import { type Plane } from '@/lib/geometry';
-import { getPlanningRotationMatrix, localToGlobal3D, globalToScreen2D, type Point2D } from '@/lib/planningMath';
+import { useWorkstationStore } from '@/store/workstationStore';
+import {
+  type Plane,
+  getFovHandles2D,
+  getPlanningAngleStatus,
+  getSlabDepth,
+  projectSlicePolygons,
+  PLANNING_COLOR,
+  PLANNING_WARNING_COLOR,
+} from '@/lib/geometry';
 
 interface Props {
   plane: Plane;
   size: { w: number; h: number };
 }
 
-export default function ProjectedSlab({ plane, size }: Props) {
-  const planning = useWorkstationStore((s) => s.planning);
-  const setPlanning = useWorkstationStore((s) => s.setPlanning);
-  const pxPerMm = size.w / 250; // Replace with VIEW_FOV_MM
-  
-  const dragState = useRef<{ type: string; startX: number; startY: number; initPlan: PlanningObject } | null>(null);
+const MAX_VISIBLE_SLICE_LINES = 11;
 
-  const hwX = planning.fovRead / 2;
-  const hwY = planning.fovPhase / 2;
-  const count = planning.sliceCount;
-  const stepZ = planning.sliceThickness + planning.sliceGap;
-  const totalThickness = count * stepZ;
-  const startZ = -totalThickness / 2 + stepZ / 2;
+function visibleSliceIndices(count: number): Set<number> {
+  if (count <= MAX_VISIBLE_SLICE_LINES) return new Set(Array.from({ length: count }, (_, index) => index));
 
-  const matrix = getPlanningRotationMatrix(planning);
-
-  // Determine which local axis to draw as the line
-  const px1 = globalToScreen2D(localToGlobal3D({ x: -hwX, y: 0, z: 0 }, planning, matrix), plane, pxPerMm, size.w, size.h);
-  const px2 = globalToScreen2D(localToGlobal3D({ x: hwX, y: 0, z: 0 }, planning, matrix), plane, pxPerMm, size.w, size.h);
-  const py1 = globalToScreen2D(localToGlobal3D({ x: 0, y: -hwY, z: 0 }, planning, matrix), plane, pxPerMm, size.w, size.h);
-  const py2 = globalToScreen2D(localToGlobal3D({ x: 0, y: hwY, z: 0 }, planning, matrix), plane, pxPerMm, size.w, size.h);
-
-  const lenX = Math.hypot(px2.x - px1.x, px2.y - px1.y);
-  const lenY = Math.hypot(py2.x - py1.x, py2.y - py1.y);
-  
-  const lines: { p1: Point2D; p2: Point2D }[] = [];
-  for (let i = 0; i < count; i++) {
-    const z = startZ + i * stepZ;
-    let p1, p2;
-    if (lenX > lenY) {
-      p1 = globalToScreen2D(localToGlobal3D({ x: -hwX, y: 0, z }, planning, matrix), plane, pxPerMm, size.w, size.h);
-      p2 = globalToScreen2D(localToGlobal3D({ x: hwX, y: 0, z }, planning, matrix), plane, pxPerMm, size.w, size.h);
-    } else {
-      p1 = globalToScreen2D(localToGlobal3D({ x: 0, y: -hwY, z }, planning, matrix), plane, pxPerMm, size.w, size.h);
-      p2 = globalToScreen2D(localToGlobal3D({ x: 0, y: hwY, z }, planning, matrix), plane, pxPerMm, size.w, size.h);
-    }
-    lines.push({ p1, p2 });
+  const indices = new Set<number>();
+  for (let index = 0; index < MAX_VISIBLE_SLICE_LINES; index += 1) {
+    indices.add(Math.round((index / (MAX_VISIBLE_SLICE_LINES - 1)) * (count - 1)));
   }
+  indices.add(Math.floor(count / 2));
+  return indices;
+}
 
-  // Also project the center normal for rotation reference
-  const centerScreen = globalToScreen2D(localToGlobal3D({ x: 0, y: 0, z: 0 }, planning, matrix), plane, pxPerMm, size.w, size.h);
+/** Orthogonal slab projection with restrained Siemens-style reference lines. */
+export default function ProjectedSlab({ plane, size }: Props) {
+  const planning = useWorkstationStore((state) => state.planning);
+  const angleStatus = getPlanningAngleStatus(planning);
+  const color = angleStatus.isValid ? PLANNING_COLOR : PLANNING_WARNING_COLOR;
+  const handles = getFovHandles2D(planning, plane, size.w, size.h, false);
+  const slicePolygons = projectSlicePolygons(planning, plane, size.w, size.h);
+  const visibleIndices = visibleSliceIndices(slicePolygons.length);
+  const boundary = [handles.tl, handles.tr, handles.br, handles.bl]
+    .map((point) => `${point.x},${point.y}`)
+    .join(' ');
 
-  const handlePointerDown = (e: React.PointerEvent<SVGElement>) => {
-    e.stopPropagation();
-    (e.target as SVGElement).setPointerCapture(e.pointerId);
-    // If shift key or near edge, maybe rotate, otherwise translate
-    const type = e.shiftKey ? 'rotate' : 'translate';
-    dragState.current = {
-      type,
-      startX: e.clientX,
-      startY: e.clientY,
-      initPlan: { ...planning },
-    };
-  };
-
-  const handlePointerMove = useCallback((e: PointerEvent) => {
-    if (!dragState.current) return;
-    const { type, startX, startY, initPlan } = dragState.current;
-    
-    const dxPx = e.clientX - startX;
-    const dyPx = e.clientY - startY;
-    const dxMm = dxPx / pxPerMm;
-    const dyMm = dyPx / pxPerMm;
-
-    if (type === 'translate') {
-      let dX = 0, dY = 0, dZ = 0;
-      if (plane === 'axial') { dX = dxMm; dY = dyMm; }
-      else if (plane === 'coronal') { dX = dxMm; dZ = dyMm; }
-      else if (plane === 'sagittal') { dY = dxMm; dZ = dyMm; }
-      
-      setPlanning({
-        centerX: initPlan.centerX + dX,
-        centerY: initPlan.centerY + dY,
-        centerZ: initPlan.centerZ + dZ,
-      });
-    } else if (type === 'rotate') {
-       // Oblique rotation logic
-       const startAngle = Math.atan2(startY - centerScreen.y, startX - centerScreen.x);
-       const currAngle = Math.atan2(e.clientY - centerScreen.y, e.clientX - centerScreen.x);
-       const dTheta = (currAngle - startAngle) * (180 / Math.PI);
-       
-       if (plane === 'axial') setPlanning({ rotZ: initPlan.rotZ + dTheta });
-       else if (plane === 'coronal') setPlanning({ rotY: initPlan.rotY + dTheta });
-       else if (plane === 'sagittal') setPlanning({ rotX: initPlan.rotX + dTheta });
-    }
-  }, [plane, pxPerMm, centerScreen.x, centerScreen.y, setPlanning]);
-
-  const handlePointerUp = useCallback((e: PointerEvent) => {
-    dragState.current = null;
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
-  }, [handlePointerMove, handlePointerUp]);
+  const visibleLines = slicePolygons.flatMap((slice, index) => {
+    if (!visibleIndices.has(index)) return [];
+    const [c1, c2, c3, c4] = slice.corners;
+    return [{
+      index,
+      isCenter: slice.isCenter,
+      start: { x: (c1.x + c4.x) / 2, y: (c1.y + c4.y) / 2 },
+      end: { x: (c2.x + c3.x) / 2, y: (c2.y + c3.y) / 2 },
+    }];
+  });
 
   return (
-    <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 15 }}>
-      {/* Invisible hit target for the whole slab */}
-      <polygon 
-        points={
-          lines.length > 0 
-            ? `${lines[0].p1.x},${lines[0].p1.y} ${lines[0].p2.x},${lines[0].p2.y} ${lines[lines.length-1].p2.x},${lines[lines.length-1].p2.y} ${lines[lines.length-1].p1.x},${lines[lines.length-1].p1.y}`
-            : ""
-        }
-        fill="transparent"
-        cursor="move"
-        onPointerDown={handlePointerDown}
+    <svg
+      aria-hidden="true"
+      data-planning-overlay="projected"
+      data-plane={plane}
+      data-angle-valid={angleStatus.isValid}
+      data-fov-read={planning.fovRead}
+      data-slice-count={planning.sliceCount}
+      data-slice-thickness={planning.sliceThickness}
+      data-slice-gap={planning.sliceGap}
+      data-slab-depth={getSlabDepth(planning).toFixed(1)}
+      viewBox={`0 0 ${size.w} ${size.h}`}
+      preserveAspectRatio="none"
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 15, pointerEvents: 'none' }}
+    >
+      <polygon
+        points={boundary}
+        fill="none"
+        stroke={color}
+        strokeWidth="1"
+        strokeDasharray="7 5"
+        opacity="0.78"
+        vectorEffect="non-scaling-stroke"
       />
-      {/* Slice Lines */}
-      {lines.map((l, i) => (
+
+      {visibleLines.map((line) => (
         <line
-          key={i}
-          x1={l.p1.x} y1={l.p1.y}
-          x2={l.p2.x} y2={l.p2.y}
-          stroke="#FFFF00"
-          strokeWidth={1}
-          strokeDasharray="4 2"
-          pointerEvents="none"
+          key={line.index}
+          x1={line.start.x}
+          y1={line.start.y}
+          x2={line.end.x}
+          y2={line.end.y}
+          stroke={color}
+          strokeWidth={line.isCenter ? 1.35 : 0.8}
+          strokeDasharray={line.isCenter ? undefined : '5 3'}
+          opacity={line.isCenter ? 1 : 0.62}
+          vectorEffect="non-scaling-stroke"
         />
       ))}
+
+      <circle cx={handles.center.x} cy={handles.center.y} r="3.7" fill="rgba(0,0,0,0.25)" stroke={color} strokeWidth="1.1" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

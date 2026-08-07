@@ -1,8 +1,10 @@
 'use client';
 import { useEffect, useRef, useState, useCallback, memo } from 'react';
+import Image from 'next/image';
 import { useWorkstationStore } from '@/store/workstationStore';
 import type { Sequence } from '@/lib/scanEngine';
 import { formatTime } from '@/lib/scanEngine';
+import { getProtocolSeries, PROTOCOL_SERIES_MIME } from '@/lib/protocolSeries';
 import { toast } from '@/lib/toast';
 
 const STATUS_CONFIG = {
@@ -76,14 +78,16 @@ interface RowProps {
   onDragStart: (e: React.DragEvent, id: number) => void;
   onDragOver: (e: React.DragEvent, id: number) => void;
   onDrop: (e: React.DragEvent, id: number) => void;
+  onOpenSeries: (id: number) => void;
   dragOverId: number | null;
 }
 
 const QueueRow = memo(function QueueRow({
   seq, idx, isSelected, scanProgress, onSelect, onContextMenu,
-  onDragStart, onDragOver, onDrop, dragOverId,
+  onDragStart, onDragOver, onDrop, onOpenSeries, dragOverId,
 }: RowProps) {
   const cfg = STATUS_CONFIG[seq.status];
+  const series = getProtocolSeries(seq.id);
   const isScanning = seq.status === 'scanning';
   const sarColor = seq.sarPct >= 90 ? '#ef4444' : seq.sarPct >= 70 ? '#f59e0b' : '#22c55e';
   const isDragOver = dragOverId === seq.id;
@@ -95,12 +99,17 @@ const QueueRow = memo(function QueueRow({
       onDragOver={e => onDragOver(e, seq.id)}
       onDrop={e => onDrop(e, seq.id)}
       onClick={() => onSelect(seq.id)}
+      onDoubleClick={() => series && onOpenSeries(seq.id)}
       onContextMenu={e => onContextMenu(e, seq.id)}
-      title={`${seq.name} — Right-click for options, drag to reorder`}
+      data-sequence-id={seq.id}
+      data-series-count={series?.frameCount ?? 0}
+      title={series
+        ? `${seq.name} — ${series.frameCount} DICOM images. Drag into a viewport or double-click to open.`
+        : `${seq.name} — Right-click for options, drag to reorder`}
       style={{
         display:'grid',
-        gridTemplateColumns:'14px 24px 52px 1fr 44px 28px 52px 36px 80px 36px',
-        padding:'0 4px 0 2px', height:'22px', alignItems:'center', gap:'4px',
+        gridTemplateColumns:'14px 24px 52px 28px minmax(100px,1fr) 44px 28px 52px 36px 80px 36px',
+        padding:'0 4px 0 2px', height:'26px', alignItems:'center', gap:'4px',
         borderBottom: isDragOver ? '2px solid #22d3ee' : '1px solid #0d1520',
         cursor:'pointer',
         background: isSelected ? '#0f2d50' : isScanning ? 'rgba(34,211,238,0.04)' : 'transparent',
@@ -126,11 +135,34 @@ const QueueRow = memo(function QueueRow({
         {cfg.icon} {cfg.label}
       </span>
 
-      <span style={{
-        fontSize:'9px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-        color: seq.status==='done' ? '#334155' : seq.status==='active' ? '#94a3b8' : '#64748b',
-        textDecoration: seq.status==='done' ? 'line-through' : 'none',
-      }} title={seq.name}>{seq.name}</span>
+      {series ? (
+        <button
+          type="button"
+          aria-label={`Open ${series.name} ${series.frameCount} image stack`}
+          onClick={event => { event.stopPropagation(); onOpenSeries(seq.id); }}
+          title={`Open ${series.name} image stack`}
+          style={{
+            width:'26px', height:'22px', padding:0, border:'1px solid #164e63',
+            background:'#020617', overflow:'hidden', borderRadius:'2px', cursor:'pointer',
+          }}
+        >
+          <Image src={series.thumbnail} alt="" draggable={false} width={26} height={22} unoptimized style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+        </button>
+      ) : <span />}
+
+      <span style={{ display:'flex', alignItems:'center', minWidth:0, gap:'5px' }}>
+        <span style={{
+          fontSize:'9px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+          color: seq.status==='done' ? '#334155' : seq.status==='active' ? '#94a3b8' : '#64748b',
+          textDecoration: seq.status==='done' ? 'line-through' : 'none',
+        }}>{seq.name}</span>
+        {series && (
+          <span style={{
+            flexShrink:0, fontFamily:'Roboto Mono,monospace', fontSize:'6.5px', fontWeight:700,
+            color:'#22d3ee', background:'#083344', border:'1px solid #155e75', borderRadius:'2px', padding:'1px 3px',
+          }}>{series.frameCount} IMG</span>
+        )}
+      </span>
 
       <span style={{ fontFamily:'Roboto Mono,monospace', fontSize:'9px', color:'#22d3ee', textAlign:'right' }}>{seq.ta}</span>
       <span style={{ fontFamily:'Roboto Mono,monospace', fontSize:'9px', color:'#475569', textAlign:'right' }}>{seq.sl}</span>
@@ -158,8 +190,8 @@ const QueueRow = memo(function QueueRow({
 export default function ProtocolQueue() {
   const {
     sequences, selectedSeqId, scan, calcTA,
-    selectSeq, startScan, pauseScan, stopScan, applyParams,
-    setScanProgress, finishScan, deleteSeq, duplicateSeq, moveSeq, reorderSeq,
+    selectSeq, startScan, pauseScan, stopScan,
+    setScanProgress, finishScan, deleteSeq, duplicateSeq, moveSeq, reorderSeq, setImageSeries,
   } = useWorkstationStore();
 
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -235,8 +267,12 @@ export default function ProtocolQueue() {
   }, [sequences, selectedSeqId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Drag handlers ─────────────────────────────────────────────────────────
-  const handleDragStart = useCallback((_e: React.DragEvent, id: number) => {
+  const handleDragStart = useCallback((e: React.DragEvent, id: number) => {
     dragId.current = id;
+    e.dataTransfer.effectAllowed = 'copyMove';
+    e.dataTransfer.setData('text/plain', String(id));
+    const series = getProtocolSeries(id);
+    if (series) e.dataTransfer.setData(PROTOCOL_SERIES_MIME, String(id));
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, id: number) => {
@@ -253,6 +289,13 @@ export default function ProtocolQueue() {
     }
     dragId.current = null;
   }, [reorderSeq]);
+
+  const handleOpenSeries = useCallback((id: number) => {
+    const series = getProtocolSeries(id);
+    if (!series) return;
+    setImageSeries(series);
+    toast(`${series.name}: ${series.frameCount} images loaded into ${series.plane.toUpperCase()}`, 'success');
+  }, [setImageSeries]);
 
   // ── Context menu ──────────────────────────────────────────────────────────
   const handleContextMenu = useCallback((e: React.MouseEvent, seqId: number) => {
@@ -338,7 +381,7 @@ export default function ProtocolQueue() {
       {/* ── Column headers ──────────────────────────────────────────────── */}
       <div style={{
         display:'grid',
-        gridTemplateColumns:'14px 24px 52px 1fr 44px 28px 52px 36px 80px 36px',
+        gridTemplateColumns:'14px 24px 52px 28px minmax(100px,1fr) 44px 28px 52px 36px 80px 36px',
         padding:'0 4px 0 2px', height:'20px', alignItems:'center',
         background:'#08101c', borderBottom:'1px solid #1e293b',
         position:'sticky', top:0, zIndex:5,
@@ -348,6 +391,7 @@ export default function ProtocolQueue() {
         <span />
         <span>#</span>
         <span>STATUS</span>
+        <span>IMG</span>
         <span>SEQUENCE NAME</span>
         <span style={{ textAlign:'right' }}>TA</span>
         <span style={{ textAlign:'right' }}>SL</span>
@@ -371,6 +415,7 @@ export default function ProtocolQueue() {
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
+            onOpenSeries={handleOpenSeries}
             dragOverId={dragOverId}
           />
         ))}
@@ -382,7 +427,7 @@ export default function ProtocolQueue() {
         <span style={{ color:'#1e293b' }}>|</span>
         <span style={{ color:'#334155' }}>{sequences.length} seq</span>
         <span style={{ color:'#1e293b' }}>|</span>
-        <span style={{ color:'#334155' }}>F5=Run · F6=Pause · Esc=Abort · ↑↓=Nav · Del=Delete · Drag=Reorder · Right-click=Menu</span>
+        <span style={{ color:'#334155' }}>F5=Run · F6=Pause · Esc=Abort · Drag series to viewer · Double-click=Open · Right-click=Menu</span>
         <div style={{ flex:1 }} />
         <span style={{ color:'#334155', fontFamily:'Roboto Mono,monospace' }}>Calc TA: {calcTA}</span>
       </div>

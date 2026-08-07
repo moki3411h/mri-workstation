@@ -3,13 +3,14 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useWorkstationStore, type PlanningObject } from '@/store/workstationStore';
 import {
   type Plane, type Point3D, type Matrix3x3,
-  project3Dto2D, unproject2Dto3D,
+  unproject2Dto3D,
   getFovHandles2D, hitTestFov,
-  getPlanningTargetPlane, CURSOR_MAP,
+  getPlanningTargetPlane, getPlanningAngleStatus, getSlabDepth, CURSOR_MAP,
   VIEW_FOV_MM,
   axisAngleToMatrix, multiplyMatrices, matrixToEuler,
 } from '@/lib/geometry';
 import { toast } from '@/lib/toast';
+import { getProtocolSeries, PROTOCOL_SERIES_MIME } from '@/lib/protocolSeries';
 import ActiveFOV from './ActiveFOV';
 import ProjectedSlab from './ProjectedSlab';
 
@@ -68,18 +69,43 @@ export default function MRIViewport({ plane }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
   const imgRef    = useRef<HTMLImageElement | HTMLVideoElement | null>(null);
+  const cineFramesRef = useRef<HTMLImageElement[]>([]);
+  const cineFrameRef = useRef(0);
+  const cineLastAtRef = useRef(0);
   const rafRef    = useRef<number>(0);
   const drag      = useRef<DragState | null>(null);
   const pan       = useRef({ x: 0, y: 0 });
   const zoom      = useRef(1);
 
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const imageUrl = useWorkstationStore(state => state.images[plane]);
+  const attachedSeries = useWorkstationStore(state => state.imageSeries[plane]);
 
   // ── Image loading ─────────────────────────────────────────
 
   useEffect(() => {
-    const store = useWorkstationStore.getState();
-    const url = store.images[plane];
+    let cancelled = false;
+    cineFramesRef.current = [];
+    cineLastAtRef.current = 0;
+
+    if (attachedSeries) {
+      const initialFrame = Math.floor(attachedSeries.frames.length / 2);
+      cineFrameRef.current = initialFrame;
+      const frames = new Array<HTMLImageElement>(attachedSeries.frames.length);
+      attachedSeries.frames.forEach((url, index) => {
+        const image = new Image();
+        image.onload = () => {
+          if (cancelled) return;
+          frames[index] = image;
+          cineFramesRef.current = frames;
+          if (index === initialFrame) imgRef.current = image;
+        };
+        image.src = url;
+      });
+      return () => { cancelled = true; };
+    }
+
+    const url = imageUrl;
     if (!url) { imgRef.current = null; return; }
 
     const isVideo =
@@ -90,15 +116,15 @@ export default function MRIViewport({ plane }: Props) {
     if (isVideo) {
       const vid = document.createElement('video');
       vid.muted = true; vid.playsInline = true;
-      vid.onloadedmetadata = () => { imgRef.current = vid; };
+      vid.onloadedmetadata = () => { if (!cancelled) imgRef.current = vid; };
       vid.src = url; vid.load();
     } else {
       const img = new Image();
-      img.onload = () => { imgRef.current = img; };
+      img.onload = () => { if (!cancelled) imgRef.current = img; };
       img.src = url;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useWorkstationStore(s => s.images[plane])]);
+    return () => { cancelled = true; };
+  }, [attachedSeries, imageUrl]);
 
   // ── Canvas sizing ──────────────────────────────────────────
 
@@ -134,7 +160,7 @@ export default function MRIViewport({ plane }: Props) {
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     const c = canvasRef.current!;
-    try { c.setPointerCapture(e.pointerId); } catch (_) {}
+    try { c.setPointerCapture(e.pointerId); } catch {}
     
     const store = useWorkstationStore.getState();
     store.setActiveVP(plane);
@@ -226,9 +252,24 @@ export default function MRIViewport({ plane }: Props) {
             centerZ: initPlan.centerZ + d3.z,
           });
         } else if (handle === 'rotate') {
-          // Rotation around the normal axis of the current view
-          const degPerPx = 180 / Math.min(c.width, c.height);
-          const deltaAngle = dxPx * degPerPx;
+          // Rotate/tilt around the prescription center. The same interaction
+          // works from all three viewports and updates the single 3D object.
+          const initialHandles = getFovHandles2D(
+            initPlan,
+            plane,
+            c.width,
+            c.height,
+            getPlanningTargetPlane(initPlan) === plane,
+          );
+          const startPointerX = startX * c.width;
+          const startPointerY = startY * c.height;
+          const currentPointerX = pos.x * c.width;
+          const currentPointerY = pos.y * c.height;
+          const startAngle = Math.atan2(startPointerY - initialHandles.center.y, startPointerX - initialHandles.center.x);
+          const currentAngle = Math.atan2(currentPointerY - initialHandles.center.y, currentPointerX - initialHandles.center.x);
+          let deltaAngle = (currentAngle - startAngle) * 180 / Math.PI;
+          if (deltaAngle > 180) deltaAngle -= 360;
+          if (deltaAngle < -180) deltaAngle += 360;
           
           let axis: Point3D = { x: 0, y: 0, z: 1 };
           if (plane === 'axial') axis = { x: 0, y: 0, z: 1 };
@@ -246,14 +287,32 @@ export default function MRIViewport({ plane }: Props) {
             rotZ: euler.rotZ
           });
         } else {
-          // Resize — handle specific edges/corners
+          // Resize using the projected read/phase axes. Corner drags preserve
+          // the prescription proportions, so every linked viewport grows or
+          // shrinks together from the single planning object.
           const scaleMm = VIEW_FOV_MM / Math.min(c.width, c.height);
-          const dxMm = dxPx * scaleMm / zoom.current;
-          const dyMm = dyPx * scaleMm / zoom.current;
-          
           const targetPlane = getPlanningTargetPlane(initPlan);
           const isTarget = targetPlane === plane;
-          
+          const initialHandles = getFovHandles2D(initPlan, plane, c.width, c.height, isTarget);
+          const readAxisLength = Math.hypot(
+            initialHandles.right.x - initialHandles.left.x,
+            initialHandles.right.y - initialHandles.left.y,
+          ) || 1;
+          const phaseAxisLength = Math.hypot(
+            initialHandles.bottom.x - initialHandles.top.x,
+            initialHandles.bottom.y - initialHandles.top.y,
+          ) || 1;
+          const readAxis = {
+            x: (initialHandles.right.x - initialHandles.left.x) / readAxisLength,
+            y: (initialHandles.right.y - initialHandles.left.y) / readAxisLength,
+          };
+          const phaseAxis = {
+            x: (initialHandles.bottom.x - initialHandles.top.x) / phaseAxisLength,
+            y: (initialHandles.bottom.y - initialHandles.top.y) / phaseAxisLength,
+          };
+          const readDeltaMm = (dxPx * readAxis.x + dyPx * readAxis.y) * scaleMm / zoom.current;
+          const phaseDeltaMm = (dxPx * phaseAxis.x + dyPx * phaseAxis.y) * scaleMm / zoom.current;
+
           let newFovRead = initPlan.fovRead;
           let newFovPhase = initPlan.fovPhase;
           let newThickness = initPlan.sliceThickness;
@@ -263,30 +322,42 @@ export default function MRIViewport({ plane }: Props) {
           const isTop    = handle === 'top'    || handle === 'tl' || handle === 'tr';
           const isBottom = handle === 'bottom' || handle === 'bl' || handle === 'br';
 
-          if (isTarget) {
-            // For active view: Left/Right scales Read, Top/Bottom scales Phase
-            if (isLeft)   newFovRead = Math.max(10, initPlan.fovRead - dxMm * 2);
-            if (isRight)  newFovRead = Math.max(10, initPlan.fovRead + dxMm * 2);
-            if (isTop)    newFovPhase = Math.max(10, initPlan.fovPhase - dyMm * 2);
-            if (isBottom) newFovPhase = Math.max(10, initPlan.fovPhase + dyMm * 2);
+          const isCorner = (isLeft || isRight) && (isTop || isBottom);
+          if (isCorner) {
+            const startDistance = Math.hypot(
+              startX * c.width - initialHandles.center.x,
+              startY * c.height - initialHandles.center.y,
+            ) || 1;
+            const currentDistance = Math.hypot(
+              pos.x * c.width - initialHandles.center.x,
+              pos.y * c.height - initialHandles.center.y,
+            );
+            const ratio = Math.max(0.35, Math.min(2.5, currentDistance / startDistance));
+            newFovRead = initPlan.fovRead * ratio;
+            if (isTarget) {
+              newFovPhase = initPlan.fovPhase * ratio;
+            } else {
+              const newDepth = getSlabDepth(initPlan) * ratio;
+              newThickness = (newDepth - (initPlan.sliceCount - 1) * initPlan.sliceGap) / initPlan.sliceCount;
+            }
+          } else if (isTarget) {
+            if (isLeft) newFovRead = initPlan.fovRead - readDeltaMm * 2;
+            if (isRight) newFovRead = initPlan.fovRead + readDeltaMm * 2;
+            if (isTop) newFovPhase = initPlan.fovPhase - phaseDeltaMm * 2;
+            if (isBottom) newFovPhase = initPlan.fovPhase + phaseDeltaMm * 2;
           } else {
-            // For projected view: Left/Right scales Read, Top/Bottom scales Slab Depth (thickness)
-            if (isLeft)   newFovRead = Math.max(10, initPlan.fovRead - dxMm * 2);
-            if (isRight)  newFovRead = Math.max(10, initPlan.fovRead + dxMm * 2);
+            if (isLeft) newFovRead = initPlan.fovRead - readDeltaMm * 2;
+            if (isRight) newFovRead = initPlan.fovRead + readDeltaMm * 2;
             if (isTop || isBottom) {
-              const deltaDepth = isTop ? -dyMm * 2 : dyMm * 2;
-              // Assuming slab depth is N * thickness + (N-1) * gap
-              // To safely scale, just scale thickness by ratio
-              const oldDepth = Math.max(1, initPlan.sliceCount * initPlan.sliceThickness + (initPlan.sliceCount - 1) * initPlan.sliceGap);
-              const newDepth = Math.max(1, oldDepth + deltaDepth);
-              const ratio = newDepth / oldDepth;
-              newThickness = Math.max(0.1, initPlan.sliceThickness * ratio);
+              const newDepth = getSlabDepth(initPlan) + (isTop ? -phaseDeltaMm * 2 : phaseDeltaMm * 2);
+              newThickness = (newDepth - (initPlan.sliceCount - 1) * initPlan.sliceGap) / initPlan.sliceCount;
             }
           }
 
           // Clamp to reasonable MRI FOV range
-          newFovRead  = Math.min(500, newFovRead);
-          newFovPhase = Math.min(500, newFovPhase);
+          newFovRead = Math.max(80, Math.min(500, newFovRead));
+          newFovPhase = Math.max(80, Math.min(500, newFovPhase));
+          newThickness = Math.max(0.5, Math.min(20, newThickness));
 
           store.setPlanning({ fovRead: newFovRead, fovPhase: newFovPhase, sliceThickness: newThickness });
         }
@@ -299,7 +370,7 @@ export default function MRIViewport({ plane }: Props) {
       const hitResult = hitTestFov(pos.x * c.width, pos.y * c.height, handles);
       
       if (hitResult) {
-        c.style.cursor = hitResult === 'rotate' ? 'grabbing' : (CURSOR_MAP[hitResult] || 'move');
+        c.style.cursor = hitResult === 'rotate' ? 'grab' : (CURSOR_MAP[hitResult] || 'move');
       } else {
         c.style.cursor = 'default';
       }
@@ -308,9 +379,19 @@ export default function MRIViewport({ plane }: Props) {
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
+    const completedDrag = drag.current;
     drag.current = null;
-    try { canvasRef.current?.releasePointerCapture(e.pointerId); } catch (_) {}
+    try { canvasRef.current?.releasePointerCapture(e.pointerId); } catch {}
     if (canvasRef.current) canvasRef.current.style.cursor = 'default';
+    if (completedDrag?.type === 'fov') {
+      const store = useWorkstationStore.getState();
+      const angleStatus = getPlanningAngleStatus(store.planning);
+      store.setStatusMsg(
+        angleStatus.isValid
+          ? `Planning updated — angle ${angleStatus.deviation.toFixed(1)}° within tolerance`
+          : `Planning warning — angle ${angleStatus.deviation.toFixed(1)}° exceeds ${angleStatus.tolerance}°`,
+      );
+    }
   }, []);
 
   const onWheel = useCallback((e: React.WheelEvent) => {
@@ -328,11 +409,16 @@ export default function MRIViewport({ plane }: Props) {
     } else if (e.altKey) {
       // Slice Thickness
       state.setPlanning({ sliceThickness: Math.max(0.5, Math.min(20, state.planning.sliceThickness + d * 0.5)) });
+    } else if (state.imageSeries[plane]) {
+      // Unmodified wheel scrolls through the attached DICOM stack.
+      const count = state.imageSeries[plane]!.frameCount;
+      const direction = e.deltaY > 0 ? 1 : -1;
+      cineFrameRef.current = (cineFrameRef.current + direction + count) % count;
     } else {
       // Zoom
       zoom.current = Math.max(0.3, Math.min(8, zoom.current * (e.deltaY > 0 ? 0.9 : 1.1)));
     }
-  }, []);
+  }, [plane]);
 
   const onDblClick = useCallback(() => {
     zoom.current = 1;
@@ -343,6 +429,20 @@ export default function MRIViewport({ plane }: Props) {
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
+    const sequenceId = Number(e.dataTransfer.getData(PROTOCOL_SERIES_MIME));
+    const protocolSeries = Number.isFinite(sequenceId) && sequenceId > 0
+      ? getProtocolSeries(sequenceId)
+      : undefined;
+    if (protocolSeries) {
+      const store = useWorkstationStore.getState();
+      store.setImageSeries(protocolSeries);
+      toast(
+        `${protocolSeries.name}: ${protocolSeries.frameCount} images loaded into ${PLANE_LABEL[protocolSeries.plane]}`,
+        'success',
+      );
+      return;
+    }
+
     const file = e.dataTransfer.files[0];
     if (!file) return;
     const store = useWorkstationStore.getState();
@@ -410,7 +510,6 @@ export default function MRIViewport({ plane }: Props) {
 
   // ── Rendering ─────────────────────────────────────────────
 
-  const planning = useWorkstationStore(s => s.planning);
   const showFov = useWorkstationStore(s => s.show.fov);
 
   const renderGrid = useCallback((ctx: CanvasRenderingContext2D, W: number, H: number, isDark: boolean) => {
@@ -454,7 +553,7 @@ export default function MRIViewport({ plane }: Props) {
     const W = c.width, H = c.height;
 
     const state = useWorkstationStore.getState();
-    const { planning, planningActive, wl, show, scan, sequences, selectedSeqId, debugMode, theme } = state;
+    const { planning, planningActive, wl, show, scan, sequences, selectedSeqId, debugMode, theme, imageSeries } = state;
     const isDark = theme !== 'light';
 
     ctx.clearRect(0, 0, W, H);
@@ -487,7 +586,33 @@ export default function MRIViewport({ plane }: Props) {
 
     // ── Active state (image loaded) ──
     const w = wl[plane];
-    const img = imgRef.current;
+    const viewportSeries = imageSeries[plane];
+    let img = imgRef.current;
+    let cinePlaying = false;
+    if (viewportSeries && cineFramesRef.current.length) {
+      cinePlaying = scan.running && !scan.paused && scan.seqId === viewportSeries.sequenceId;
+      const now = performance.now();
+      if (cinePlaying) {
+        const frameInterval = 1000 / viewportSeries.fps;
+        if (!cineLastAtRef.current) cineLastAtRef.current = now;
+        const elapsed = now - cineLastAtRef.current;
+        if (elapsed >= frameInterval) {
+          const advance = Math.max(1, Math.floor(elapsed / frameInterval));
+          cineFrameRef.current = (cineFrameRef.current + advance) % viewportSeries.frameCount;
+          cineLastAtRef.current = now;
+        }
+      } else {
+        cineLastAtRef.current = now;
+      }
+      img = cineFramesRef.current[cineFrameRef.current] ?? imgRef.current;
+      c.dataset.seriesId = viewportSeries.id;
+      c.dataset.cineFrame = String(cineFrameRef.current + 1);
+      c.dataset.cinePlaying = String(cinePlaying);
+    } else {
+      delete c.dataset.seriesId;
+      delete c.dataset.cineFrame;
+      c.dataset.cinePlaying = 'false';
+    }
 
     // Background
     ctx.fillStyle = isDark ? '#06090f' : '#e8ecf2';
@@ -497,7 +622,6 @@ export default function MRIViewport({ plane }: Props) {
     if (img) {
       let imgW = 0, imgH = 0;
       if (img instanceof HTMLVideoElement) {
-        const sl = state.wl[plane]; // use wl as proxy for slice
         if (!isNaN(img.duration) && img.duration > 0) img.currentTime = 0.5 * img.duration;
         imgW = img.videoWidth; imgH = img.videoHeight;
       } else {
@@ -572,7 +696,7 @@ export default function MRIViewport({ plane }: Props) {
     }
 
     // ── Plane ID label + Sequence info ──
-    const seq = sequences.find(s => s.id === selectedSeqId);
+    const seq = sequences.find(s => s.id === (viewportSeries?.sequenceId ?? selectedSeqId));
     ctx.font = 'bold 9.5px Roboto Mono, monospace';
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillStyle = PLANE_COLOR[plane];
@@ -596,6 +720,14 @@ export default function MRIViewport({ plane }: Props) {
       `FOV ${Math.round(planning.fovRead)}×${Math.round(planning.fovPhase)} mm`,
       6, H - 5
     );
+    if (viewportSeries) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = cinePlaying ? '#22d3ee' : 'rgba(148,163,184,0.85)';
+      ctx.fillText(
+        `IMG ${String(cineFrameRef.current + 1).padStart(2, '0')}/${viewportSeries.frameCount}${cinePlaying ? '  ▶ CINE' : '  · wheel to scroll'}`,
+        W / 2, H - 5,
+      );
+    }
     ctx.textAlign = 'right';
     ctx.fillText(
       `R${planning.rotX.toFixed(0)}° / ${planning.rotY.toFixed(0)}° / ${planning.rotZ.toFixed(0)}°`,
@@ -636,9 +768,15 @@ export default function MRIViewport({ plane }: Props) {
   return (
     <div
       ref={wrapRef}
+      data-mri-viewport={plane}
+      data-loaded-series={attachedSeries?.id ?? ''}
       style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: '#06090f' }}
       onContextMenu={e => e.preventDefault()}
-      onDragOver={e => { e.preventDefault(); (e.currentTarget as HTMLElement).classList.add('drag-over'); }}
+      onDragOver={e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = e.dataTransfer.types.includes(PROTOCOL_SERIES_MIME) ? 'copy' : 'move';
+        (e.currentTarget as HTMLElement).classList.add('drag-over');
+      }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) (e.currentTarget as HTMLElement).classList.remove('drag-over'); }}
       onDrop={onDrop}
     >

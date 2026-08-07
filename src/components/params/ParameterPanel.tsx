@@ -2,6 +2,11 @@
 import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { useWorkstationStore } from '@/store/workstationStore';
 import type { ParamsState, PlanningObject } from '@/store/workstationStore';
+import {
+  getPlanningAngleStatus,
+  PLANNING_COLOR,
+  PLANNING_WARNING_COLOR,
+} from '@/lib/geometry';
 
 // ─── Stable input for params (protocol params) ──────────────────────────────
 
@@ -183,6 +188,52 @@ const GROUP = memo(function GROUP({ title }: { title: string }) {
   return <div className="pgroup-title">{title}</div>;
 });
 
+const AngleCheck = memo(function AngleCheck({
+  isValid,
+  deviation,
+  tolerance,
+  onCorrect,
+}: {
+  isValid: boolean;
+  deviation: number;
+  tolerance: number;
+  onCorrect: () => void;
+}) {
+  const color = isValid ? PLANNING_COLOR : PLANNING_WARNING_COLOR;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-planning-angle-status={isValid ? 'valid' : 'warning'}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '7px', margin: '5px 8px 7px', padding: '6px 7px',
+        border: `1px solid ${isValid ? 'rgba(216,223,49,0.28)' : 'rgba(255,77,87,0.48)'}`,
+        background: isValid ? 'rgba(216,223,49,0.035)' : 'rgba(255,77,87,0.07)', borderRadius: '2px',
+      }}
+    >
+      <span aria-hidden="true" style={{ color, fontSize: '11px', lineHeight: 1 }}>{isValid ? '●' : '▲'}</span>
+      <span style={{ flex: 1, minWidth: 0, fontFamily: 'Roboto Mono, monospace' }}>
+        <strong style={{ display: 'block', color, fontSize: '8.5px', letterSpacing: '0.45px' }}>
+          {isValid ? 'ANGLE OK' : 'ANGLE OUT OF RANGE'}
+        </strong>
+        <span style={{ color: '#64748b', fontSize: '7.5px' }}>{deviation.toFixed(1)}° / ±{tolerance}° protocol tolerance</span>
+      </span>
+      {!isValid ? (
+        <button
+          type="button"
+          onClick={onCorrect}
+          style={{
+            border: `1px solid ${color}`, background: 'rgba(255,77,87,0.08)', color,
+            fontFamily: 'Roboto Mono, monospace', fontSize: '7.5px', padding: '3px 5px', cursor: 'pointer', borderRadius: '2px',
+          }}
+        >
+          CORRECT ANGLE
+        </button>
+      ) : null}
+    </div>
+  );
+});
+
 // ─── Slider (planning) ───────────────────────────────────────────────────────
 
 interface PlanSliderProps {
@@ -194,21 +245,42 @@ interface PlanSliderProps {
 }
 
 const PlanSlider = memo(function PlanSlider({ label, planKey, min, max, step = 1, unit, onCommit, storeValue }: PlanSliderProps) {
-  const [local, setLocal] = useState(storeValue);
-  useEffect(() => { setLocal(storeValue); }, [storeValue]);
+  const [draft, setDraft] = useState<string | null>(null);
+  const displayValue = draft ?? String(storeValue);
+
+  const commitDraft = useCallback(() => {
+    const parsed = Number(draft);
+    if (draft !== null && Number.isFinite(parsed)) {
+      onCommit(planKey, Math.max(min, Math.min(max, parsed)));
+    }
+    setDraft(null);
+  }, [draft, max, min, onCommit, planKey]);
+
+  const updateDraft = useCallback((value: string) => {
+    setDraft(value);
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      onCommit(planKey, Math.max(min, Math.min(max, parsed)));
+    }
+  }, [max, min, onCommit, planKey]);
 
   return (
     <div style={{ padding:'3px 8px 4px', borderBottom:'1px solid #0d1520' }}>
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'9px', marginBottom:'2px' }}>
         <span className="plbl" style={{ flex:'unset' }}>{label}</span>
-        <span style={{ color:'#22d3ee', fontFamily:'Roboto Mono,monospace', fontSize:'9px' }}>{typeof local === 'number' ? local.toFixed(step < 1 ? 1 : 0) : local}{unit}</span>
+        <span style={{ color:'#22d3ee', fontFamily:'Roboto Mono,monospace', fontSize:'9px' }}>{storeValue.toFixed(step < 1 ? 1 : 0)}{unit}</span>
       </div>
       <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
-        <input type="range" min={min} max={max} step={step} value={local}
-          onChange={e => { const v = Number(e.target.value); setLocal(v); onCommit(planKey, v); }}
+        <input type="range" min={min} max={max} step={step} value={storeValue}
+          aria-label={label}
+          onChange={e => onCommit(planKey, Number(e.target.value))}
           style={{ flex:1 }} />
-        <input type="text" inputMode="decimal" value={String(local)}
-          onChange={e => { const v = Number(e.target.value); if (!isNaN(v)) { setLocal(v); onCommit(planKey, v); } }}
+        <input type="text" inputMode="decimal" value={displayValue}
+          aria-label={`${label} value`}
+          onFocus={() => setDraft(String(storeValue))}
+          onChange={e => updateDraft(e.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setDraft(null); }}
           style={{ width:'44px', background:'#060b14', border:'1px solid #263040', color:'#94a3b8', fontFamily:'Roboto Mono,monospace', fontSize:'9px', padding:'1px 4px', borderRadius:'2px', outline:'none' }}
         />
       </div>
@@ -260,6 +332,8 @@ export default function ParameterPanel() {
   const setParam = useWorkstationStore(s => s.setParam);
   const setPlanning = useWorkstationStore(s => s.setPlanning);
   const setPlanningOrientation = useWorkstationStore(s => s.setPlanningOrientation);
+  const setStatusMsg = useWorkstationStore(s => s.setStatusMsg);
+  const angleStatus = getPlanningAngleStatus(planning);
 
   const commitParam = useCallback((key: keyof ParamsState, value: number | string) => {
     setParam(key, value);
@@ -272,6 +346,11 @@ export default function ParameterPanel() {
       setPlanning({ [key]: value } as Partial<PlanningObject>);
     }
   }, [setPlanning, setPlanningOrientation]);
+
+  const correctPlanningAngle = useCallback(() => {
+    setPlanning({ rotX: 0, rotY: 0, rotZ: 0 });
+    setStatusMsg('Planning angle corrected to protocol orientation');
+  }, [setPlanning, setStatusMsg]);
 
   // Shorthand helpers
   const P = (label: string, pid: keyof ParamsState, unit?: string, type: 'number' | 'text' = 'number', min?: number, max?: number) => (
@@ -314,12 +393,13 @@ export default function ParameterPanel() {
         {/* ── Tab 0: Routine (slice geometry + timing) ── */}
         {tab === 0 && (<>
           <GROUP title="GEOMETRY" />
+          <AngleCheck {...angleStatus} onCorrect={correctPlanningAngle} />
           {PSL('FoV read',       'fovRead',     100, 500, ' mm', 1)}
           {PSL('FoV phase',      'fovPhase',    100, 500, ' mm', 1)}
           {PSL('Slice Count',    'sliceCount',     1, 200,  ' sl', 1)}
           {PSL('Thickness',      'sliceThickness', 0.5, 20, ' mm', 0.5)}
           {PSL('Slice Gap',      'sliceGap',       -5, 20,  ' mm', 0.1)}
-          {PSEL('Phase enc. dir','phaseDir' as any, ['A>>P','P>>A','R>>L','L>>R','H>>F','F>>H'])}
+          {PSEL('Phase enc. dir','phaseDir', ['AP','RL','HF'])}
           {P('Matrix',           'matrix',           '',      'number', 64, 1024)}
           {PSEL('Orientation',   'orientation',   ['axial','coronal','sagittal'])}
           <GROUP title="TIMING" />
@@ -354,6 +434,7 @@ export default function ParameterPanel() {
         {/* ── Tab 3: Geometry (FOV, orientation, rotation) ── */}
         {tab === 3 && (<>
           <GROUP title="FIELD OF VIEW" />
+          <AngleCheck {...angleStatus} onCorrect={correctPlanningAngle} />
           {PSL('FoV Read',       'fovRead',     100, 500, ' mm', 1)}
           {PSL('FoV Phase',      'fovPhase',    100, 500, ' mm', 1)}
           <GROUP title="ORIENTATION" />
