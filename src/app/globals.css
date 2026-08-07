@@ -56,8 +56,7 @@
 }
 
 html, body {
-  width: 100vw; height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
   background: var(--c-bg-deepest);
   color: var(--c-text-base);
   font-family: var(--c-font-ui);

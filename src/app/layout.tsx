@@ -41,8 +41,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" style={{ height: '100%', overflow: 'hidden' }}>
-      <body style={{ height: '100%', overflow: 'hidden', background: '#04060a' }}>
+    <html lang="en">
+      <body style={{ minHeight: '100vh', background: '#04060a' }}>
         {children}
         <div id="toast-root" aria-live="polite" aria-label="Notifications" />
       </body>
