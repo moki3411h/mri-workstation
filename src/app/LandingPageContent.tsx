@@ -97,8 +97,9 @@ export default function LandingPage() {
         scrollTrigger: {
           trigger: containerRef.current,
           start: 'top top',
-          end: 'bottom bottom',
-          scrub: 1, // Smooth scrubbing
+          end: '+=4000',
+          scrub: true,
+          pin: true,
         },
       });
 
@@ -149,10 +150,10 @@ export default function LandingPage() {
   }, [loaded]);
 
   return (
-    <div ref={containerRef} className="bg-black text-white min-h-screen relative font-sans selection:bg-blue-500 selection:text-white" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+    <div className="bg-black text-white min-h-screen relative font-sans selection:bg-blue-500 selection:text-white" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
       
-      {/* Canvas Container Pinned */}
-      <div className="sticky top-0 left-0 w-full h-screen overflow-hidden z-0">
+      {/* Canvas Container Pinned via GSAP */}
+      <div ref={containerRef} className="w-full h-screen overflow-hidden relative z-0">
         {!loaded && (
           <div className="absolute inset-0 flex items-center justify-center text-blue-400 font-semibold tracking-widest text-sm">
             INITIALIZING SYSTEM...
@@ -169,13 +170,12 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/90 pointer-events-none" />
       </div>
 
-      {/* Content Overlay */}
-      <div ref={sectionsRef} className="relative z-10 w-full" style={{ marginTop: '-100vh' }}>
+      {/* Content Below Hero */}
+      <div ref={sectionsRef} className="relative z-10 w-full bg-black">
         
         {/* Sections for scrolling */}
-        {/* We use highly spaced out sections to provide scrolling room for the canvas sequence */}
         
-        <section className="h-[150vh] flex flex-col justify-center items-center text-center px-6">
+        <section className="h-screen flex flex-col justify-center items-center text-center px-6">
           <div className="scroll-section">
             <h1 className="text-6xl md:text-8xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-blue-200">
               MRI Workstation Pro
@@ -186,7 +186,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="h-[150vh] flex flex-col justify-center items-center text-center px-6">
+        <section className="h-screen flex flex-col justify-center items-center text-center px-6">
           <div className="scroll-section">
             <h2 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
               AI-assisted Planning
@@ -197,7 +197,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="h-[150vh] flex flex-col justify-center items-center text-center px-6">
+        <section className="h-screen flex flex-col justify-center items-center text-center px-6">
           <div className="scroll-section">
             <h2 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-500">
               Advanced Visualization
@@ -208,7 +208,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="h-[150vh] flex flex-col justify-center items-center text-center px-6">
+        <section className="h-screen flex flex-col justify-center items-center text-center px-6">
           <div className="scroll-section">
             <h2 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
               Clinical Workflow
@@ -219,7 +219,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="h-[150vh] flex flex-col justify-center items-center text-center px-6">
+        <section className="h-screen flex flex-col justify-center items-center text-center px-6">
           <div className="scroll-section">
             <h2 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
               Research & Education
@@ -230,7 +230,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="h-[100vh] flex flex-col justify-center items-center text-center px-6 pb-32">
+        <section className="h-screen flex flex-col justify-center items-center text-center px-6 pb-32">
           <div className="scroll-section">
             <h2 className="text-6xl md:text-8xl font-bold tracking-tighter mb-12">
               Ready to explore?
