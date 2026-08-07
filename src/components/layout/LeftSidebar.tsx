@@ -39,11 +39,11 @@ export default function LeftSidebar() {
   const [openBody, setOpenBody] = useState<string | null>('Brain');
 
   const tabs = ['Patient', 'Protocols', 'Queue', 'Presets'];
-  const ROW = { display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 8px', fontSize: '9.5px', cursor: 'pointer', color: '#64748b', borderBottom: '1px solid #0d1520' } as const;
-  const SEL = { ...ROW, background: '#0f2d50', color: '#94a3b8', borderLeft: '2px solid #22d3ee' } as const;
+  const ROW = { display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 8px', fontSize: '9.5px', cursor: 'pointer', color: 'var(--c-text-mid)', borderBottom: '1px solid var(--c-border-faint)' } as const;
+  const SEL = { ...ROW, background: 'var(--c-bg-selected)', color: 'var(--c-text-base)', borderLeft: '2px solid var(--c-cyan)' } as const;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#08101c', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--c-bg-dark)', overflow: 'hidden' }}>
       {/* Tabs */}
       <div className="tab-bar" style={{ flexShrink: 0 }}>
         {tabs.map((t, i) => (
@@ -52,11 +52,11 @@ export default function LeftSidebar() {
       </div>
 
       {/* Search */}
-      <div style={{ padding: '5px 6px', flexShrink: 0, borderBottom: '1px solid #1e293b' }}>
+      <div style={{ padding: '5px 6px', flexShrink: 0, borderBottom: '1px solid var(--c-border)' }}>
         <input
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search..."
-          style={{ width: '100%', fontSize: '10px', padding: '3px 6px', background: '#04060a', border: '1px solid #1e293b', color: '#94a3b8', borderRadius: '2px', outline: 'none' }}
+          style={{ width: '100%', fontSize: '10px', padding: '3px 6px', background: 'var(--c-bg-deepest)', border: '1px solid var(--c-border)', color: 'var(--c-text-base)', borderRadius: '2px', outline: 'none' }}
         />
       </div>
 
@@ -68,30 +68,30 @@ export default function LeftSidebar() {
           <div>
             {MOCK_PATIENTS.map(pt => (
               <div key={pt.id}>
-                <div style={{ padding: '6px 8px', background: '#0d1626', borderBottom: '1px solid #1e293b' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8' }}>{pt.name}</div>
-                  <div style={{ fontSize: '8.5px', color: '#475569', fontFamily: 'Roboto Mono, monospace' }}>ID: {pt.id} | {pt.sex} | {pt.dob}</div>
+                <div style={{ padding: '6px 8px', background: 'var(--c-bg-card)', borderBottom: '1px solid var(--c-border)' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--c-text-base)' }}>{pt.name}</div>
+                  <div style={{ fontSize: '8.5px', color: 'var(--c-text-subtle)', fontFamily: 'Roboto Mono, monospace' }}>ID: {pt.id} | {pt.sex} | {pt.dob}</div>
                 </div>
                 {pt.studies.map(st => (
                   <div key={st.id}>
                     <div
                       onClick={() => setOpenStudy(openStudy === st.id ? null : st.id)}
-                      style={{ ...ROW, padding: '4px 8px', fontSize: '9px', background: '#0a1220', color: '#475569', cursor: 'pointer' }}
+                      style={{ ...ROW, padding: '4px 8px', fontSize: '9px', background: 'var(--c-bg-panel)', color: 'var(--c-text-subtle)', cursor: 'pointer' }}
                     >
-                      <span style={{ color: '#334155', fontSize: '8px' }}>{openStudy === st.id ? '▼' : '▶'}</span>
-                      <span style={{ fontSize: '8.5px', color: '#64748b' }}>{st.date}</span>
-                      <span style={{ color: '#475569', fontSize: '8px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.desc}</span>
+                      <span style={{ color: 'var(--c-text-muted)', fontSize: '8px' }}>{openStudy === st.id ? '▼' : '▶'}</span>
+                      <span style={{ fontSize: '8.5px', color: 'var(--c-text-mid)' }}>{st.date}</span>
+                      <span style={{ color: 'var(--c-text-subtle)', fontSize: '8px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.desc}</span>
                     </div>
                     {openStudy === st.id && st.series.filter(s => !search || s.toLowerCase().includes(search.toLowerCase())).map((ser, si) => (
                       <div
                         key={si}
                         onClick={() => toast(`Loading: ${ser}`)}
                         style={ROW}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#0d1a2d'; }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--c-bg-hover)'; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                       >
-                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: ['#22d3ee','#ffe040','#60ffa0','#c084fc'][si % 4], flexShrink: 0 }} />
-                        <span style={{ fontSize: '9px', color: '#64748b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ser}</span>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: ['var(--c-cyan)','var(--c-yellow)','#60ffa0','#c084fc'][si % 4], flexShrink: 0 }} />
+                        <span style={{ fontSize: '9px', color: 'var(--c-text-mid)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ser}</span>
                       </div>
                     ))}
                   </div>
@@ -112,7 +112,7 @@ export default function LeftSidebar() {
         {tab === 2 && (
           <div>
             {sequences.map(seq => {
-              const statusColors: Record<string, string> = { done: '#22c55e', active: '#f59e0b', scanning: '#22d3ee', pending: '#334155' };
+              const statusColors: Record<string, string> = { done: 'var(--c-green)', active: 'var(--c-amber)', scanning: 'var(--c-cyan)', pending: 'var(--c-text-muted)' };
               const statusIcons: Record<string, string> = { done: '✓', active: '◉', scanning: '▶', pending: '○' };
               const isSelected = seq.id === selectedSeqId;
               return (
@@ -120,12 +120,12 @@ export default function LeftSidebar() {
                   key={seq.id}
                   onClick={() => selectSeq(seq.id)}
                   style={isSelected ? SEL : ROW}
-                  onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = '#0d1a2d'; }}
+                  onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'var(--c-bg-hover)'; }}
                   onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
                   <span style={{ color: statusColors[seq.status], fontSize: '9px', minWidth: '10px' }}>{statusIcons[seq.status]}</span>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '9px', color: seq.status === 'done' ? '#334155' : '#64748b' }}>{seq.name}</span>
-                  <span style={{ fontFamily: 'Roboto Mono, monospace', fontSize: '8px', color: '#334155', flexShrink: 0 }}>{seq.ta}</span>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '9px', color: seq.status === 'done' ? 'var(--c-text-muted)' : 'var(--c-text-mid)' }}>{seq.name}</span>
+                  <span style={{ fontFamily: 'Roboto Mono, monospace', fontSize: '8px', color: 'var(--c-text-muted)', flexShrink: 0 }}>{seq.ta}</span>
                 </div>
               );
             })}
@@ -138,12 +138,12 @@ export default function LeftSidebar() {
             {PRESETS.filter(p => !search || p.toLowerCase().includes(search.toLowerCase())).map((preset, i) => (
               <div key={i} style={{ ...ROW, justifyContent: 'space-between', padding: '5px 8px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '9px' }}>
-                  <span style={{ color: '#f59e0b' }}>★</span>
-                  <span style={{ color: '#64748b' }}>{preset}</span>
+                  <span style={{ color: 'var(--c-amber)' }}>★</span>
+                  <span style={{ color: 'var(--c-text-mid)' }}>{preset}</span>
                 </span>
                 <button
                   onClick={() => toast(`Preset loaded: ${preset}`, 'success')}
-                  style={{ fontSize: '8px', background: '#1c2a3e', border: '1px solid #263040', color: '#64748b', padding: '1px 6px', borderRadius: '2px', cursor: 'pointer' }}
+                  style={{ fontSize: '8px', background: 'var(--c-bg-elevated)', border: '1px solid var(--c-border-bright)', color: 'var(--c-text-mid)', padding: '1px 6px', borderRadius: '2px', cursor: 'pointer' }}
                 >
                   Load
                 </button>

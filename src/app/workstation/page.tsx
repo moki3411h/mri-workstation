@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useWorkstationStore } from '@/store/workstationStore';
 import StatusBar from '@/components/layout/StatusBar';
 
@@ -23,13 +23,33 @@ export default function WorkstationPage() {
   const {
     leftCollapsed, rightCollapsed,
     showHelp, showPatient, showPhysics, showLearning, showAI,
-    showImageImport, theme,
+    showImageImport, theme, setTheme,
   } = useWorkstationStore();
+  const themeHydrated = useRef(false);
 
-  // ── Apply theme class to document root ─────────────────────────────────────
+  // Apply theme changes and persist them after the saved preference is restored.
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    if (themeHydrated.current) {
+      window.localStorage.setItem('mri-pro-workstation-theme', theme);
+    }
   }, [theme]);
+
+  // Restore the device preference while keeping dark as the first-use default.
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem('mri-pro-workstation-theme');
+    themeHydrated.current = true;
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      document.documentElement.dataset.theme = savedTheme;
+      setTheme(savedTheme);
+    } else {
+      window.localStorage.setItem('mri-pro-workstation-theme', 'dark');
+    }
+  }, [setTheme]);
+
+  useEffect(() => () => {
+    delete document.documentElement.dataset.theme;
+  }, []);
 
   // ── Global keyboard shortcuts ──────────────────────────────────────────────
   useEffect(() => {
@@ -49,11 +69,6 @@ export default function WorkstationPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const isDark = theme !== 'light';
-  const bg = isDark ? '#04060a' : '#e8ecf5';
-  const border = isDark ? '#1e293b' : '#c5d0e0';
-  const queueBg = isDark ? '#111827' : '#dde4ef';
-
   return (
     <div id="workstation" data-theme={theme} style={{
       display: 'grid',
@@ -62,17 +77,18 @@ export default function WorkstationPage() {
       height: '100vh',
       width: '100vw',
       overflow: 'hidden',
-      background: bg,
-      transition: 'grid-template-columns 0.2s ease',
+      background: 'var(--c-bg-deepest)',
+      color: 'var(--c-text-base)',
+      transition: 'grid-template-columns 0.2s ease, background-color 0.18s ease, color 0.18s ease',
     }}>
       {/* Top bar — full width */}
-      <div id="topbar" style={{ gridColumn: '1 / -1', gridRow: '1', borderBottom: `1px solid ${border}`, zIndex: 50 }}>
+      <div id="topbar" style={{ gridColumn: '1 / -1', gridRow: '1', borderBottom: '1px solid var(--c-border)', zIndex: 50 }}>
         <TopBar />
       </div>
 
       {/* Left sidebar */}
       {!leftCollapsed && (
-        <div id="leftsb" style={{ gridColumn: '1', gridRow: '2', borderRight: `1px solid ${border}`, overflow: 'hidden' }}>
+        <div id="leftsb" style={{ gridColumn: '1', gridRow: '2', borderRight: '1px solid var(--c-border)', overflow: 'hidden' }}>
           <LeftSidebar />
         </div>
       )}
@@ -89,7 +105,7 @@ export default function WorkstationPage() {
 
       {/* Right sidebar */}
       {!rightCollapsed && (
-        <div id="rightsb" style={{ gridColumn: '3', gridRow: '2', borderLeft: `1px solid ${border}`, overflow: 'hidden' }}>
+        <div id="rightsb" style={{ gridColumn: '3', gridRow: '2', borderLeft: '1px solid var(--c-border)', overflow: 'hidden' }}>
           <RightSidebar />
         </div>
       )}
@@ -98,18 +114,18 @@ export default function WorkstationPage() {
       <div id="queue" style={{
         gridColumn: '1 / -1',
         gridRow: '3',
-        borderTop: `2px solid ${border}`,
+        borderTop: '2px solid var(--c-border)',
         display: 'flex',
-        background: queueBg,
+        background: 'var(--c-bg-panel)',
         overflow: 'hidden',
       }}>
         <ProtocolQueue />
-        <div style={{ width: '1px', background: border, flexShrink: 0 }} />
+        <div style={{ width: '1px', background: 'var(--c-border)', flexShrink: 0 }} />
         <ParameterPanel />
       </div>
 
       {/* Status bar */}
-      <div id="statusbar" style={{ gridColumn: '1 / -1', gridRow: '4', borderTop: `1px solid ${border}`, zIndex: 40 }}>
+      <div id="statusbar" style={{ gridColumn: '1 / -1', gridRow: '4', borderTop: '1px solid var(--c-border)', zIndex: 40 }}>
         <StatusBar />
       </div>
 

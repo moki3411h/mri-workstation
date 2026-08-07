@@ -64,7 +64,7 @@ const QUIZ = [
 ];
 
 const CASES = [
-  { name:'Normal Brain',       seq:'T2 TSE',     color:'#1e3a5f' },
+  { name:'Normal Brain',       seq:'T2 TSE',     color:'var(--c-border-accent)' },
   { name:'Acute Stroke',       seq:'DWI b1000',  color:'#7f1d1d' },
   { name:'Glioblastoma',       seq:'T1+Gd TRA',  color:'#4c1d95' },
   { name:'Multiple Sclerosis', seq:'FLAIR TRA',  color:'#78350f' },
@@ -90,14 +90,14 @@ export default function LearningPanel() {
   }
 
   return (
-    <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'540px', background:'#0a1220', borderLeft:'1px solid #1e3a5f', zIndex:800, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'-4px 0 24px rgba(0,0,0,0.5)' }}>
+    <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'540px', background:'var(--c-bg-panel)', borderLeft:'1px solid var(--c-border-accent)', zIndex:800, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'-4px 0 24px rgba(0,0,0,0.5)' }}>
       {/* Header */}
-      <div style={{ display:'flex', alignItems:'center', padding:'10px 14px', borderBottom:'1px solid #1e293b', background:'rgba(14,165,233,0.05)', flexShrink:0 }}>
+      <div style={{ display:'flex', alignItems:'center', padding:'10px 14px', borderBottom:'1px solid var(--c-border)', background:'rgba(14,165,233,0.05)', flexShrink:0 }}>
         <div>
-          <div style={{ fontSize:'12px', fontWeight:700, color:'#e2e8f0' }}>📚 MRI Learning Center</div>
-          <div style={{ fontSize:'8.5px', color:'#475569', marginTop:'1px' }}>Interactive MRI education for radiographers and students</div>
+          <div style={{ fontSize:'12px', fontWeight:700, color:'var(--c-text-bright)' }}>📚 MRI Learning Center</div>
+          <div style={{ fontSize:'8.5px', color:'var(--c-text-subtle)', marginTop:'1px' }}>Interactive MRI education for radiographers and students</div>
         </div>
-        <button onClick={toggleLearning} style={{ marginLeft:'auto', background:'transparent', border:'none', color:'#64748b', fontSize:'18px', cursor:'pointer' }}>✕</button>
+        <button onClick={toggleLearning} style={{ marginLeft:'auto', background:'transparent', border:'none', color:'var(--c-text-mid)', fontSize:'18px', cursor:'pointer' }}>✕</button>
       </div>
 
       <div className="tab-bar" style={{ flexShrink:0 }}>
@@ -112,35 +112,35 @@ export default function LearningPanel() {
         {tab===0 && (
           <div style={{ padding:'8px' }}>
             {LESSONS.map((lesson, i) => (
-              <div key={i} style={{ marginBottom:'6px', border:'1px solid #1e293b', borderRadius:'2px', overflow:'hidden', background:'#0d1626' }}>
+              <div key={i} style={{ marginBottom:'6px', border:'1px solid var(--c-border)', borderRadius:'2px', overflow:'hidden', background:'var(--c-bg-card)' }}>
                 <button
                   onClick={()=>setOpenLesson(openLesson===i?null:i)}
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:'8px', padding:'8px 10px', background:'transparent', border:'none', cursor:'pointer', textAlign:'left' }}
                 >
                   <span style={{ fontSize:'14px' }}>{lesson.icon}</span>
-                  <span style={{ fontSize:'10px', fontWeight:600, color:'#94a3b8', flex:1 }}>{lesson.title}</span>
-                  <span style={{ color:'#334155', fontSize:'10px' }}>{openLesson===i?'▼':'▶'}</span>
+                  <span style={{ fontSize:'10px', fontWeight:600, color:'var(--c-text-base)', flex:1 }}>{lesson.title}</span>
+                  <span style={{ color:'var(--c-text-muted)', fontSize:'10px' }}>{openLesson===i?'▼':'▶'}</span>
                 </button>
                 {openLesson===i && (
-                  <div style={{ padding:'10px', borderTop:'1px solid #1e293b' }}>
-                    <p style={{ fontSize:'9.5px', color:'#64748b', lineHeight:'1.6', marginBottom:'10px' }}>{lesson.content}</p>
+                  <div style={{ padding:'10px', borderTop:'1px solid var(--c-border)' }}>
+                    <p style={{ fontSize:'9.5px', color:'var(--c-text-mid)', lineHeight:'1.6', marginBottom:'10px' }}>{lesson.content}</p>
                     <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'10px', fontSize:'9px' }}>
                       <thead><tr>
-                        <th style={{ color:'#334155', padding:'3px 6px', textAlign:'left', borderBottom:'1px solid #1e293b' }}>Parameter</th>
-                        <th style={{ color:'#334155', padding:'3px 6px', textAlign:'left', borderBottom:'1px solid #1e293b' }}>Value</th>
-                        <th style={{ color:'#334155', padding:'3px 6px', textAlign:'left', borderBottom:'1px solid #1e293b' }}>Effect</th>
+                        <th style={{ color:'var(--c-text-muted)', padding:'3px 6px', textAlign:'left', borderBottom:'1px solid var(--c-border)' }}>Parameter</th>
+                        <th style={{ color:'var(--c-text-muted)', padding:'3px 6px', textAlign:'left', borderBottom:'1px solid var(--c-border)' }}>Value</th>
+                        <th style={{ color:'var(--c-text-muted)', padding:'3px 6px', textAlign:'left', borderBottom:'1px solid var(--c-border)' }}>Effect</th>
                       </tr></thead>
                       <tbody>{lesson.params.map(([p,v,e],j)=>(
-                        <tr key={j} style={{ borderBottom:'1px solid #0d1520' }}>
-                          <td style={{ padding:'3px 6px', color:'#22d3ee', fontFamily:'Roboto Mono,monospace' }}>{p}</td>
-                          <td style={{ padding:'3px 6px', color:'#64748b', fontFamily:'Roboto Mono,monospace' }}>{v}</td>
-                          <td style={{ padding:'3px 6px', color:'#475569' }}>{e}</td>
+                        <tr key={j} style={{ borderBottom:'1px solid var(--c-border-faint)' }}>
+                          <td style={{ padding:'3px 6px', color:'var(--c-cyan)', fontFamily:'Roboto Mono,monospace' }}>{p}</td>
+                          <td style={{ padding:'3px 6px', color:'var(--c-text-mid)', fontFamily:'Roboto Mono,monospace' }}>{v}</td>
+                          <td style={{ padding:'3px 6px', color:'var(--c-text-subtle)' }}>{e}</td>
                         </tr>
                       ))}</tbody>
                     </table>
-                    <div style={{ fontSize:'8.5px', color:'#475569', fontWeight:600, marginBottom:'4px' }}>Clinical Applications:</div>
+                    <div style={{ fontSize:'8.5px', color:'var(--c-text-subtle)', fontWeight:600, marginBottom:'4px' }}>Clinical Applications:</div>
                     <ul style={{ margin:0, paddingLeft:'14px' }}>
-                      {lesson.clinical.map((c,j)=><li key={j} style={{ fontSize:'9px', color:'#64748b', marginBottom:'2px' }}>{c}</li>)}
+                      {lesson.clinical.map((c,j)=><li key={j} style={{ fontSize:'9px', color:'var(--c-text-mid)', marginBottom:'2px' }}>{c}</li>)}
                     </ul>
                   </div>
                 )}
@@ -153,16 +153,16 @@ export default function LearningPanel() {
         {tab===1 && (
           <div style={{ padding:'12px' }}>
             {submitted && (
-              <div style={{ marginBottom:'12px', padding:'10px', background: score>=4?'rgba(34,197,94,0.1)':'rgba(245,158,11,0.1)', border:`1px solid ${score>=4?'#22c55e':'#f59e0b'}`, borderRadius:'2px' }}>
-                <div style={{ fontSize:'12px', fontWeight:700, color: score>=4?'#22c55e':'#f59e0b' }}>Score: {score}/{QUIZ.length}</div>
-                <div style={{ fontSize:'9px', color:'#64748b', marginTop:'3px' }}>
+              <div style={{ marginBottom:'12px', padding:'10px', background: score>=4?'rgba(34,197,94,0.1)':'rgba(245,158,11,0.1)', border:`1px solid ${score>=4?'var(--c-green)':'var(--c-amber)'}`, borderRadius:'2px' }}>
+                <div style={{ fontSize:'12px', fontWeight:700, color: score>=4?'var(--c-green)':'var(--c-amber)' }}>Score: {score}/{QUIZ.length}</div>
+                <div style={{ fontSize:'9px', color:'var(--c-text-mid)', marginTop:'3px' }}>
                   {score===5?'Perfect! Excellent MRI physics knowledge.':score>=4?'Great work! Review the one you missed.':score>=3?'Good. Review the FLAIR and DWI lessons.':'Review the Lessons tab to strengthen your understanding.'}
                 </div>
               </div>
             )}
             {QUIZ.map((q, qi) => (
-              <div key={qi} style={{ marginBottom:'12px', padding:'10px', background:'#0d1626', border:'1px solid #1e293b', borderRadius:'2px' }}>
-                <div style={{ fontSize:'10px', fontWeight:600, color:'#94a3b8', marginBottom:'8px' }}>{qi+1}. {q.q}</div>
+              <div key={qi} style={{ marginBottom:'12px', padding:'10px', background:'var(--c-bg-card)', border:'1px solid var(--c-border)', borderRadius:'2px' }}>
+                <div style={{ fontSize:'10px', fontWeight:600, color:'var(--c-text-base)', marginBottom:'8px' }}>{qi+1}. {q.q}</div>
                 <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
                   {q.opts.map((opt, oi) => {
                     const isSel = selected[qi]===oi;
@@ -173,26 +173,26 @@ export default function LearningPanel() {
                         style={{
                           textAlign:'left', padding:'5px 10px', fontSize:'9.5px',
                           background: isCorr?'rgba(34,197,94,0.15)':isWrong?'rgba(239,68,68,0.1)':isSel?'rgba(34,211,238,0.1)':'rgba(0,0,0,0.2)',
-                          border: `1px solid ${isCorr?'#22c55e':isWrong?'#ef4444':isSel?'#22d3ee':'#1e293b'}`,
-                          color: isCorr?'#22c55e':isWrong?'#ef4444':isSel?'#22d3ee':'#64748b',
+                          border: `1px solid ${isCorr?'var(--c-green)':isWrong?'var(--c-red)':isSel?'var(--c-cyan)':'var(--c-border)'}`,
+                          color: isCorr?'var(--c-green)':isWrong?'var(--c-red)':isSel?'var(--c-cyan)':'var(--c-text-mid)',
                           cursor:submitted?'default':'pointer', borderRadius:'2px',
                         }}
                       >{opt}</button>
                     );
                   })}
                 </div>
-                {submitted && <div style={{ fontSize:'9px', color:'#64748b', marginTop:'6px', padding:'5px', background:'rgba(14,165,233,0.05)', borderRadius:'2px' }}>{q.exp}</div>}
+                {submitted && <div style={{ fontSize:'9px', color:'var(--c-text-mid)', marginTop:'6px', padding:'5px', background:'rgba(14,165,233,0.05)', borderRadius:'2px' }}>{q.exp}</div>}
               </div>
             ))}
             {!submitted && (
               <button onClick={submit}
-                style={{ width:'100%', padding:'8px', fontSize:'10px', fontWeight:600, background:'rgba(34,211,238,0.12)', border:'1px solid rgba(34,211,238,0.3)', color:'#22d3ee', cursor:'pointer', borderRadius:'2px' }}>
+                style={{ width:'100%', padding:'8px', fontSize:'10px', fontWeight:600, background:'rgba(34,211,238,0.12)', border:'1px solid rgba(34,211,238,0.3)', color:'var(--c-cyan)', cursor:'pointer', borderRadius:'2px' }}>
                 Submit Answers
               </button>
             )}
             {submitted && (
               <button onClick={()=>{setSelected([]);setSubmitted(false);setScore(0);}}
-                style={{ width:'100%', padding:'8px', fontSize:'10px', background:'rgba(100,116,139,0.1)', border:'1px solid #263040', color:'#64748b', cursor:'pointer', borderRadius:'2px' }}>
+                style={{ width:'100%', padding:'8px', fontSize:'10px', background:'rgba(100,116,139,0.1)', border:'1px solid var(--c-border-bright)', color:'var(--c-text-mid)', cursor:'pointer', borderRadius:'2px' }}>
                 Retry Quiz
               </button>
             )}
@@ -205,14 +205,14 @@ export default function LearningPanel() {
             {CASES.map((c, i) => (
               <div key={i}
                 onClick={()=>{toast(`Loading case: ${c.name}`);setStatusMsg(`Case loaded: ${c.name}`);}}
-                style={{ cursor:'pointer', border:'1px solid #1e293b', borderRadius:'2px', overflow:'hidden', transition:'border-color 0.15s' }}
-                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor='#22d3ee';}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor='#1e293b';}}
+                style={{ cursor:'pointer', border:'1px solid var(--c-border)', borderRadius:'2px', overflow:'hidden', transition:'border-color 0.15s' }}
+                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor='var(--c-cyan)';}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor='var(--c-border)';}}
               >
                 <div style={{ height:'80px', background:c.color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px' }}>🧠</div>
-                <div style={{ padding:'6px', background:'#0d1626' }}>
-                  <div style={{ fontSize:'9px', fontWeight:600, color:'#94a3b8', marginBottom:'2px' }}>{c.name}</div>
-                  <div style={{ fontSize:'8px', color:'#22d3ee', fontFamily:'Roboto Mono,monospace' }}>{c.seq}</div>
+                <div style={{ padding:'6px', background:'var(--c-bg-card)' }}>
+                  <div style={{ fontSize:'9px', fontWeight:600, color:'var(--c-text-base)', marginBottom:'2px' }}>{c.name}</div>
+                  <div style={{ fontSize:'8px', color:'var(--c-cyan)', fontFamily:'Roboto Mono,monospace' }}>{c.seq}</div>
                 </div>
               </div>
             ))}

@@ -153,7 +153,7 @@ const ParamSelect = memo(function ParamSelect({ label, paramKey, options, onComm
     <div className="prow">
       <span className="plbl">{label}</span>
       <select value={storeValue} onChange={e => onCommit(paramKey, e.target.value)}
-        style={{ flex:1, background:'#060b14', border:'1px solid #263040', color:'#94a3b8', fontFamily:'Roboto Mono,monospace', fontSize:'9.5px', padding:'1px 4px', borderRadius:'2px', outline:'none' }}>
+        style={{ flex:1, background:'var(--c-bg-input)', border:'1px solid var(--c-border-bright)', color:'var(--c-text-base)', fontFamily:'Roboto Mono,monospace', fontSize:'9.5px', padding:'1px 4px', borderRadius:'2px', outline:'none' }}>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
     </div>
@@ -175,7 +175,7 @@ const PlanSelect = memo(function PlanSelect({ label, planKey, options, onCommit,
     <div className="prow">
       <span className="plbl">{label}</span>
       <select value={storeValue} onChange={e => onCommit(planKey, e.target.value)}
-        style={{ flex:1, background:'#060b14', border:'1px solid #263040', color:'#94a3b8', fontFamily:'Roboto Mono,monospace', fontSize:'9.5px', padding:'1px 4px', borderRadius:'2px', outline:'none' }}>
+        style={{ flex:1, background:'var(--c-bg-input)', border:'1px solid var(--c-border-bright)', color:'var(--c-text-base)', fontFamily:'Roboto Mono,monospace', fontSize:'9.5px', padding:'1px 4px', borderRadius:'2px', outline:'none' }}>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
     </div>
@@ -216,7 +216,7 @@ const AngleCheck = memo(function AngleCheck({
         <strong style={{ display: 'block', color, fontSize: '8.5px', letterSpacing: '0.45px' }}>
           {isValid ? 'ANGLE OK' : 'ANGLE OUT OF RANGE'}
         </strong>
-        <span style={{ color: '#64748b', fontSize: '7.5px' }}>{deviation.toFixed(1)}° / ±{tolerance}° protocol tolerance</span>
+        <span style={{ color: 'var(--c-text-mid)', fontSize: '7.5px' }}>{deviation.toFixed(1)}° / ±{tolerance}° protocol tolerance</span>
       </span>
       {!isValid ? (
         <button
@@ -265,10 +265,10 @@ const PlanSlider = memo(function PlanSlider({ label, planKey, min, max, step = 1
   }, [max, min, onCommit, planKey]);
 
   return (
-    <div style={{ padding:'3px 8px 4px', borderBottom:'1px solid #0d1520' }}>
+    <div style={{ padding:'3px 8px 4px', borderBottom:'1px solid var(--c-border-faint)' }}>
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'9px', marginBottom:'2px' }}>
         <span className="plbl" style={{ flex:'unset' }}>{label}</span>
-        <span style={{ color:'#22d3ee', fontFamily:'Roboto Mono,monospace', fontSize:'9px' }}>{storeValue.toFixed(step < 1 ? 1 : 0)}{unit}</span>
+        <span style={{ color:'var(--c-cyan)', fontFamily:'Roboto Mono,monospace', fontSize:'9px' }}>{storeValue.toFixed(step < 1 ? 1 : 0)}{unit}</span>
       </div>
       <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
         <input type="range" min={min} max={max} step={step} value={storeValue}
@@ -281,7 +281,7 @@ const PlanSlider = memo(function PlanSlider({ label, planKey, min, max, step = 1
           onChange={e => updateDraft(e.target.value)}
           onBlur={commitDraft}
           onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setDraft(null); }}
-          style={{ width:'44px', background:'#060b14', border:'1px solid #263040', color:'#94a3b8', fontFamily:'Roboto Mono,monospace', fontSize:'9px', padding:'1px 4px', borderRadius:'2px', outline:'none' }}
+          style={{ width:'44px', background:'var(--c-bg-input)', border:'1px solid var(--c-border-bright)', color:'var(--c-text-base)', fontFamily:'Roboto Mono,monospace', fontSize:'9px', padding:'1px 4px', borderRadius:'2px', outline:'none' }}
         />
       </div>
     </div>
@@ -295,26 +295,26 @@ const ResultStrip = memo(function ResultStrip() {
   const calcSNR = useWorkstationStore(s => s.calcSNR);
   const calcContrast = useWorkstationStore(s => s.calcContrast);
   const calcRes = useWorkstationStore(s => s.calcRes);
-  const snrColor = calcSNR >= 60 ? '#22c55e' : calcSNR >= 30 ? '#f59e0b' : '#ef4444';
+  const snrColor = calcSNR >= 60 ? 'var(--c-green)' : calcSNR >= 30 ? 'var(--c-amber)' : 'var(--c-red)';
   const snrLabel = calcSNR >= 60 ? 'High' : calcSNR >= 30 ? 'Med' : 'Low';
   return (
-    <div style={{ padding:'5px 8px', borderTop:'2px solid #1e293b', background:'#08101c', flexShrink:0 }}>
+    <div style={{ padding:'5px 8px', borderTop:'2px solid var(--c-border)', background:'var(--c-bg-dark)', flexShrink:0 }}>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'4px', alignItems:'center' }}>
         <div>
-          <div style={{ fontSize:'7px', color:'#334155', marginBottom:'1px' }}>CALC TA</div>
-          <div style={{ fontFamily:'Roboto Mono,monospace', fontSize:'14px', fontWeight:700, color:'#22c55e', letterSpacing:'1px' }}>{calcTA}</div>
+          <div style={{ fontSize:'7px', color:'var(--c-text-muted)', marginBottom:'1px' }}>CALC TA</div>
+          <div style={{ fontFamily:'Roboto Mono,monospace', fontSize:'14px', fontWeight:700, color:'var(--c-green)', letterSpacing:'1px' }}>{calcTA}</div>
         </div>
         <div>
-          <div style={{ fontSize:'7px', color:'#334155', marginBottom:'1px' }}>SNR</div>
+          <div style={{ fontSize:'7px', color:'var(--c-text-muted)', marginBottom:'1px' }}>SNR</div>
           <div style={{ fontFamily:'Roboto Mono,monospace', fontSize:'12px', fontWeight:700, color:snrColor }}>{calcSNR} <span style={{ fontSize:'7px' }}>{snrLabel}</span></div>
         </div>
         <div>
-          <div style={{ fontSize:'7px', color:'#334155', marginBottom:'1px' }}>CONTRAST</div>
-          <div style={{ fontSize:'8px', fontWeight:700, color:'#22d3ee', background:'rgba(34,211,238,0.08)', border:'1px solid rgba(34,211,238,0.2)', borderRadius:'2px', padding:'1px 3px', display:'inline-block', lineHeight:'1.3' }}>{calcContrast}</div>
+          <div style={{ fontSize:'7px', color:'var(--c-text-muted)', marginBottom:'1px' }}>CONTRAST</div>
+          <div style={{ fontSize:'8px', fontWeight:700, color:'var(--c-cyan)', background:'rgba(34,211,238,0.08)', border:'1px solid rgba(34,211,238,0.2)', borderRadius:'2px', padding:'1px 3px', display:'inline-block', lineHeight:'1.3' }}>{calcContrast}</div>
         </div>
         <div>
-          <div style={{ fontSize:'7px', color:'#334155', marginBottom:'1px' }}>RES mm</div>
-          <div style={{ fontFamily:'Roboto Mono,monospace', fontSize:'8.5px', color:'#64748b' }}>{calcRes[0].toFixed(1)}×{calcRes[1].toFixed(1)}×{calcRes[2]}</div>
+          <div style={{ fontSize:'7px', color:'var(--c-text-muted)', marginBottom:'1px' }}>RES mm</div>
+          <div style={{ fontFamily:'Roboto Mono,monospace', fontSize:'8.5px', color:'var(--c-text-mid)' }}>{calcRes[0].toFixed(1)}×{calcRes[1].toFixed(1)}×{calcRes[2]}</div>
         </div>
       </div>
     </div>
@@ -380,7 +380,7 @@ export default function ParameterPanel() {
   );
 
   return (
-    <div style={{ width:'380px', display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:'#0a1220', flexShrink:0, borderLeft:'1px solid #1e293b' }}>
+    <div style={{ width:'380px', display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:'var(--c-bg-panel)', flexShrink:0, borderLeft:'1px solid var(--c-border)' }}>
       {/* Tabs */}
       <div className="tab-bar" style={{ flexShrink:0, flexWrap:'wrap' }}>
         {tabs.map((t, i) => (
@@ -459,7 +459,7 @@ export default function ParameterPanel() {
           <GROUP title="SEQUENCE" />
           <div className="prow">
             <span className="plbl">Seq Type</span>
-            <span style={{ color:'#475569', fontSize:'9px', fontFamily:'Roboto Mono,monospace' }}>TSE — Turbo Spin Echo</span>
+            <span style={{ color:'var(--c-text-subtle)', fontSize:'9px', fontFamily:'Roboto Mono,monospace' }}>TSE — Turbo Spin Echo</span>
           </div>
           {P('Turbo Factor',     'turboFactor',    '',   'number', 1, 64)}
           {P('Echo Train Len',   'etl',            '',   'number', 1, 64)}

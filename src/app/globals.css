@@ -11,9 +11,12 @@
   --c-bg-card:      #0d1626;
   --c-bg-hover:     #0d1a2d;
   --c-bg-selected:  #0f2d50;
+  --c-bg-input:     #060b14;
+  --c-bg-elevated:  #1c2a3e;
   --c-border-faint: #0d1520;
   --c-border:       #1e293b;
   --c-border-bright:#263040;
+  --c-border-accent:#1e3a5f;
   --c-text-dim:     #1e293b;
   --c-text-muted:   #334155;
   --c-text-subtle:  #475569;
@@ -26,33 +29,43 @@
   --c-amber:        #f59e0b;
   --c-red:          #ef4444;
   --c-yellow:       #ffe040;
+  --c-topbar-start: #0a1020;
+  --c-topbar-end:   #070d1a;
+  --c-modal-backdrop: rgba(0,0,0,0.72);
   --c-font-mono:    'Roboto Mono', 'Courier New', monospace;
   --c-font-ui:      'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
 /* ─── LIGHT THEME OVERRIDES ─────────────────────────────────────── */
 [data-theme="light"] {
-  --c-bg-deepest:   #e8ecf5;
-  --c-bg-dark:      #dde4ef;
-  --c-bg-panel:     #f0f4fa;
-  --c-bg-card:      #e4ecf7;
-  --c-bg-hover:     #d8e4f2;
-  --c-bg-selected:  #bdd5ed;
-  --c-border-faint: #c5d0e0;
-  --c-border:       #b0bece;
-  --c-border-bright:#90a4bc;
-  --c-text-dim:     #b0bece;
-  --c-text-muted:   #7a8fa8;
-  --c-text-subtle:  #5a7090;
-  --c-text-mid:     #3a5575;
-  --c-text-base:    #1c3050;
-  --c-text-bright:  #0a1a30;
-  --c-cyan:         #0284c7;
+  color-scheme: light;
+  --c-bg-deepest:   #dfe7f1;
+  --c-bg-dark:      #e9eff6;
+  --c-bg-panel:     #f6f8fb;
+  --c-bg-card:      #ffffff;
+  --c-bg-hover:     #edf3f9;
+  --c-bg-selected:  #d7ebf8;
+  --c-bg-input:     #ffffff;
+  --c-bg-elevated:  #e4ecf5;
+  --c-border-faint: #e4eaf1;
+  --c-border:       #cbd6e2;
+  --c-border-bright:#aebed0;
+  --c-border-accent:#789bb9;
+  --c-text-dim:     #a5b3c1;
+  --c-text-muted:   #71869b;
+  --c-text-subtle:  #526a82;
+  --c-text-mid:     #334e68;
+  --c-text-base:    #1f3850;
+  --c-text-bright:  #0b2035;
+  --c-cyan:         #007aa7;
   --c-cyan-dim:     rgba(2,132,199,0.12);
   --c-green:        #16a34a;
   --c-amber:        #d97706;
   --c-red:          #dc2626;
   --c-yellow:       #ca8a04;
+  --c-topbar-start: #ffffff;
+  --c-topbar-end:   #e8eef5;
+  --c-modal-backdrop: rgba(15,30,45,0.38);
 }
 
 html, body {
@@ -65,6 +78,18 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   cursor: default;
   user-select: none;
+}
+
+#workstation {
+  color: var(--c-text-base);
+  background: var(--c-bg-deepest);
+}
+
+#workstation button,
+#workstation input,
+#workstation select,
+#workstation textarea {
+  font: inherit;
 }
 
 /* ─── SCROLLBAR ─────────────────────────────────────────────────── */

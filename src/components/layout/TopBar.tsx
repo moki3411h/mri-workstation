@@ -122,8 +122,8 @@ function ProtocolSelectorPopup({ onClose, onSelect }: { onClose: () => void, onS
           marginTop: '6px',
           width: '240px',
           maxHeight: '300px',
-          background: '#0a1220',
-          border: '1px solid #1e293b',
+          background: 'var(--c-bg-panel)',
+          border: '1px solid var(--c-border)',
           borderRadius: '4px',
           boxShadow: '0 10px 25px rgba(0,0,0,0.8)',
           zIndex: 999,
@@ -152,8 +152,8 @@ function ProtocolSelectorPopup({ onClose, onSelect }: { onClose: () => void, onS
                 }}
                 style={{
                   padding: '4px 8px',
-                  background: isFocused ? '#1e293b' : 'transparent',
-                  color: isFocused ? '#e2e8f0' : '#94a3b8',
+                  background: isFocused ? 'var(--c-border)' : 'transparent',
+                  color: isFocused ? 'var(--c-text-bright)' : 'var(--c-text-base)',
                   fontSize: '10px',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -175,12 +175,12 @@ function ProtocolSelectorPopup({ onClose, onSelect }: { onClose: () => void, onS
                 onClick={() => onSelect(`${item.cat} Protocol — ${item.label}`)}
                 style={{
                   padding: '4px 8px 4px 22px',
-                  background: isFocused ? '#0f2d50' : 'transparent',
-                  color: isFocused ? '#22d3ee' : '#64748b',
+                  background: isFocused ? 'var(--c-bg-selected)' : 'transparent',
+                  color: isFocused ? 'var(--c-cyan)' : 'var(--c-text-mid)',
                   fontSize: '9.5px',
                   cursor: 'pointer',
                   borderRadius: '2px',
-                  borderLeft: isFocused ? '2px solid #22d3ee' : '2px solid transparent',
+                  borderLeft: isFocused ? '2px solid var(--c-cyan)' : '2px solid transparent',
                 }}
               >
                 {item.label}
@@ -205,7 +205,7 @@ export default function TopBar() {
     toggleLearning,
     toggleAI,
     toggleImageImport,
-    toggleTheme,
+    setTheme,
     stopScan,
     statusMsg,
     loadExam,
@@ -248,7 +248,7 @@ export default function TopBar() {
   const selectedSeq = sequences.find((s) => s.id === selectedSeqId);
   const sarPct = selectedSeq?.sarPct ?? 0;
   const sarColor =
-    sarPct >= 90 ? "#ef4444" : sarPct >= 70 ? "#f59e0b" : "#22c55e";
+    sarPct >= 90 ? "var(--c-red)" : sarPct >= 70 ? "var(--c-amber)" : "var(--c-green)";
 
   const menuItems = [
     { label: "Patient", action: togglePatient },
@@ -343,8 +343,8 @@ export default function TopBar() {
         alignItems: "center",
         height: "36px",
         width: "100%",
-        background: "linear-gradient(180deg, #0a1020 0%, #070d1a 100%)",
-        borderBottom: "1px solid #1e293b",
+        background: "linear-gradient(180deg, var(--c-topbar-start) 0%, var(--c-topbar-end) 100%)",
+        borderBottom: "1px solid var(--c-border)",
         flexShrink: 0,
         padding: "0 6px",
         gap: "0",
@@ -380,7 +380,7 @@ export default function TopBar() {
             fontWeight: 800,
             fontSize: "13px",
             letterSpacing: "2px",
-            color: "#22d3ee",
+            color: "var(--c-cyan)",
             fontFamily: "Inter,sans-serif",
           }}
         >
@@ -392,7 +392,7 @@ export default function TopBar() {
         style={{
           width: "1px",
           height: "20px",
-          background: "#1e293b",
+          background: "var(--c-border)",
           flexShrink: 0,
         }}
       />
@@ -416,7 +416,7 @@ export default function TopBar() {
               background: "transparent",
               border: "none",
               borderBottom: "2px solid transparent",
-              color: "#64748b",
+              color: "var(--c-text-mid)",
               fontSize: "10.5px",
               fontFamily: "Inter,sans-serif",
               cursor: "pointer",
@@ -424,11 +424,11 @@ export default function TopBar() {
               transition: "all 0.1s",
             }}
             onMouseEnter={(e) => {
-              (e.target as HTMLElement).style.color = "#e2e8f0";
-              (e.target as HTMLElement).style.borderBottomColor = "#22d3ee";
+              (e.target as HTMLElement).style.color = "var(--c-text-bright)";
+              (e.target as HTMLElement).style.borderBottomColor = "var(--c-cyan)";
             }}
             onMouseLeave={(e) => {
-              (e.target as HTMLElement).style.color = "#64748b";
+              (e.target as HTMLElement).style.color = "var(--c-text-mid)";
               (e.target as HTMLElement).style.borderBottomColor = "transparent";
             }}
           >
@@ -452,34 +452,34 @@ export default function TopBar() {
             alignItems: "center",
             gap: "8px",
             background: "rgba(255,255,255,0.04)",
-            border: "1px solid #1e293b",
+            border: "1px solid var(--c-border)",
             borderRadius: "2px",
             padding: "3px 12px",
             fontSize: "9.5px",
           }}
         >
-          <span style={{ color: "#94a3b8" }}>👤</span>
-          <span style={{ color: "#e2e8f0", fontWeight: 600 }}>
+          <span style={{ color: "var(--c-text-base)" }}>👤</span>
+          <span style={{ color: "var(--c-text-bright)", fontWeight: 600 }}>
             {patient.name}
           </span>
-          <span style={{ color: "#334155" }}>|</span>
+          <span style={{ color: "var(--c-text-muted)" }}>|</span>
           <span
             style={{
-              color: "#64748b",
+              color: "var(--c-text-mid)",
               fontFamily: "Roboto Mono,monospace",
               fontSize: "9px",
             }}
           >
             {patient.dob}
           </span>
-          <span style={{ color: "#334155" }}>|</span>
+          <span style={{ color: "var(--c-text-muted)" }}>|</span>
           <div style={{ position: "relative" }}>
             <button
               onClick={() => setShowProtocolSelector(!showProtocolSelector)}
               style={{
                 background: "transparent",
                 border: "none",
-                color: "#64748b",
+                color: "var(--c-text-mid)",
                 fontSize: "9px",
                 cursor: "pointer",
                 fontFamily: "Inter,sans-serif",
@@ -488,8 +488,8 @@ export default function TopBar() {
                 borderRadius: "2px",
                 transition: "color 0.1s",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#e2e8f0")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#64748b")}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--c-text-bright)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--c-text-mid)")}
             >
               {patient.study.slice(0, 28)} ▾
             </button>
@@ -523,8 +523,8 @@ export default function TopBar() {
             display: "flex",
             alignItems: "center",
             gap: "4px",
-            background: "#1c2a3e",
-            border: "1px solid #1e3a5f",
+            background: "var(--c-bg-elevated)",
+            border: "1px solid var(--c-border-accent)",
             borderRadius: "2px",
             padding: "2px 8px",
           }}
@@ -535,8 +535,8 @@ export default function TopBar() {
               height: "6px",
               borderRadius: "50%",
               flexShrink: 0,
-              background: scan.running ? "#22d3ee" : "#22c55e",
-              boxShadow: scan.running ? "0 0 6px #22d3ee" : "0 0 5px #22c55e",
+              background: scan.running ? "var(--c-cyan)" : "var(--c-green)",
+              boxShadow: scan.running ? "0 0 6px var(--c-cyan)" : "0 0 5px var(--c-green)",
               animation: scan.running
                 ? "pulseDot 1s ease-in-out infinite"
                 : "none",
@@ -548,7 +548,7 @@ export default function TopBar() {
               fontSize: "9px",
               fontWeight: 700,
               letterSpacing: "0.5px",
-              color: scan.running ? "#22d3ee" : "#22c55e",
+              color: scan.running ? "var(--c-cyan)" : "var(--c-green)",
               minWidth: "52px",
             }}
           >
@@ -567,7 +567,7 @@ export default function TopBar() {
             alignItems: "center",
             gap: "4px",
             fontSize: "8.5px",
-            color: "#64748b",
+            color: "var(--c-text-mid)",
           }}
         >
           <span>SAR</span>
@@ -575,10 +575,10 @@ export default function TopBar() {
             style={{
               width: "50px",
               height: "3px",
-              background: "#1c2a3e",
+              background: "var(--c-bg-elevated)",
               borderRadius: "2px",
               overflow: "hidden",
-              border: "1px solid #1e293b",
+              border: "1px solid var(--c-border)",
             }}
           >
             <div
@@ -603,7 +603,7 @@ export default function TopBar() {
           </span>
         </div>
 
-        <div style={{ width: "1px", height: "16px", background: "#1e293b" }} />
+        <div style={{ width: "1px", height: "16px", background: "var(--c-border)" }} />
 
         {/* RF */}
         <div
@@ -612,7 +612,7 @@ export default function TopBar() {
             alignItems: "center",
             gap: "8px",
             fontSize: "9px",
-            color: "#475569",
+            color: "var(--c-text-subtle)",
             fontFamily: "Roboto Mono,monospace",
           }}
         >
@@ -622,7 +622,7 @@ export default function TopBar() {
                 width: "5px",
                 height: "5px",
                 borderRadius: "50%",
-                background: "#22c55e",
+                background: "var(--c-green)",
                 display: "inline-block",
               }}
             />
@@ -630,16 +630,16 @@ export default function TopBar() {
           </span>
         </div>
 
-        <div style={{ width: "1px", height: "16px", background: "#1e293b" }} />
+        <div style={{ width: "1px", height: "16px", background: "var(--c-border)" }} />
 
         {/* Time */}
         <div
           style={{
             fontFamily: "Roboto Mono,monospace",
             fontSize: "11px",
-            color: "#22d3ee",
-            background: "#04060a",
-            border: "1px solid #1e293b",
+            color: "var(--c-cyan)",
+            background: "var(--c-bg-deepest)",
+            border: "1px solid var(--c-border)",
             borderRadius: "2px",
             padding: "2px 8px",
             minWidth: "62px",
@@ -659,7 +659,7 @@ export default function TopBar() {
             gap: "4px",
             background: "rgba(34,211,238,0.08)",
             border: "1px solid rgba(34,211,238,0.2)",
-            color: "#22d3ee",
+            color: "var(--c-cyan)",
             fontSize: "9.5px",
             fontWeight: 600,
             padding: "2px 8px",
@@ -701,7 +701,7 @@ export default function TopBar() {
           style={{
             background: "rgba(34,197,94,0.15)",
             border: "1px solid rgba(34,197,94,0.4)",
-            color: "#22c55e",
+            color: "var(--c-green)",
             fontSize: "9px",
             fontWeight: 700,
             padding: "2px 8px",
@@ -724,7 +724,7 @@ export default function TopBar() {
           style={{
             background: "rgba(239,68,68,0.15)",
             border: "1px solid rgba(239,68,68,0.4)",
-            color: "#ef4444",
+            color: "var(--c-red)",
             fontSize: "9px",
             fontWeight: 700,
             padding: "2px 8px",
@@ -737,23 +737,56 @@ export default function TopBar() {
           ⏹ STOP
         </button>
 
-        {/* Theme toggle */}
-        <button
-          onClick={toggleTheme}
-          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Theme (T)`}
+        {/* Workstation appearance */}
+        <div
+          role="group"
+          aria-label="Workstation appearance"
           style={{
-            background: "transparent",
-            border: "1px solid #1e293b",
-            color: "#64748b",
-            fontSize: "12px",
-            width: "24px", height: "24px",
-            borderRadius: "2px",
-            cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
+            border: "1px solid var(--c-border)",
+            background: "var(--c-bg-input)",
+            borderRadius: "3px",
+            display: "flex",
+            alignItems: "center",
+            padding: "1px",
+            height: "24px",
+            gap: "1px",
           }}
         >
-          {theme === 'dark' ? '☀' : '🌙'}
-        </button>
+          {([
+            { value: 'dark' as const, label: 'DEFAULT', icon: '◐' },
+            { value: 'light' as const, label: 'LIGHT', icon: '☀' },
+          ]).map(option => {
+            const active = theme === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setTheme(option.value)}
+                title={`${option.label[0]}${option.label.slice(1).toLowerCase()} workstation mode${option.value === 'dark' ? ' (default)' : ''}`}
+                style={{
+                  height: '20px',
+                  padding: '0 6px',
+                  border: active ? '1px solid rgba(34,211,238,0.38)' : '1px solid transparent',
+                  borderRadius: '2px',
+                  background: active ? 'var(--c-cyan-dim)' : 'transparent',
+                  color: active ? 'var(--c-cyan)' : 'var(--c-text-muted)',
+                  fontFamily: 'Roboto Mono,monospace',
+                  fontSize: '7px',
+                  fontWeight: 700,
+                  letterSpacing: '0.35px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
+              >
+                <span aria-hidden="true" style={{ fontSize: '9px' }}>{option.icon}</span>
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
 
       </div>
       {/* Cloud Load Modal */}
@@ -771,15 +804,15 @@ export default function TopBar() {
         >
           <div
             style={{
-              background: "#08101c",
-              border: "1px solid #1e293b",
+              background: "var(--c-bg-dark)",
+              border: "1px solid var(--c-border)",
               borderRadius: "4px",
               width: "400px",
               padding: "16px",
-              color: "#94a3b8",
+              color: "var(--c-text-base)",
             }}
           >
-            <h3 style={{ margin: "0 0 16px 0", color: "#22d3ee" }}>
+            <h3 style={{ margin: "0 0 16px 0", color: "var(--c-cyan)" }}>
               Cloud Exams
             </h3>
             {loadingCloud ? (
@@ -805,23 +838,23 @@ export default function TopBar() {
                     onClick={() => handleLoadCloud(ex.id)}
                     style={{
                       padding: "8px",
-                      background: "#0d1626",
-                      border: "1px solid #1e293b",
+                      background: "var(--c-bg-card)",
+                      border: "1px solid var(--c-border)",
                       borderRadius: "2px",
                       cursor: "pointer",
                     }}
                     onMouseEnter={(e) =>
-                      (e.currentTarget.style.borderColor = "#22d3ee")
+                      (e.currentTarget.style.borderColor = "var(--c-cyan)")
                     }
                     onMouseLeave={(e) =>
-                      (e.currentTarget.style.borderColor = "#1e293b")
+                      (e.currentTarget.style.borderColor = "var(--c-border)")
                     }
                   >
                     <div
                       style={{
                         fontSize: "12px",
                         fontWeight: 600,
-                        color: "#e2e8f0",
+                        color: "var(--c-text-bright)",
                       }}
                     >
                       {ex.patientName}
@@ -829,7 +862,7 @@ export default function TopBar() {
                     <div
                       style={{
                         fontSize: "10px",
-                        color: "#64748b",
+                        color: "var(--c-text-mid)",
                         marginTop: "4px",
                       }}
                     >
@@ -852,8 +885,8 @@ export default function TopBar() {
                 style={{
                   padding: "4px 12px",
                   background: "transparent",
-                  border: "1px solid #1e293b",
-                  color: "#94a3b8",
+                  border: "1px solid var(--c-border)",
+                  color: "var(--c-text-base)",
                   cursor: "pointer",
                   borderRadius: "2px",
                 }}
@@ -864,9 +897,9 @@ export default function TopBar() {
                 onClick={() => setShowCloudList(false)}
                 style={{
                   padding: "4px 12px",
-                  background: "#1e293b",
+                  background: "var(--c-border)",
                   border: "none",
-                  color: "#e2e8f0",
+                  color: "var(--c-text-bright)",
                   cursor: "pointer",
                   borderRadius: "2px",
                 }}

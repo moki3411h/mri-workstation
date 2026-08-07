@@ -16,14 +16,14 @@ interface Sep {
 
 type Item = ToolBtn | Sep;
 
-const BtnStyle = (active: boolean, color = "#22d3ee") => ({
+const BtnStyle = (active: boolean, color = "var(--c-cyan)") => ({
   display: "flex",
   alignItems: "center",
   gap: "4px",
   padding: "3px 8px",
   background: active ? `${color}18` : "transparent",
   border: active ? `1px solid ${color}40` : "1px solid transparent",
-  color: active ? color : "#475569",
+  color: active ? color : "var(--c-text-subtle)",
   cursor: "pointer",
   borderRadius: "2px",
   fontSize: "9px",
@@ -133,8 +133,8 @@ export default function ViewerToolbar() {
         gap: "2px",
         padding: "0 6px",
         height: "28px",
-        background: "#08101c",
-        borderBottom: "1px solid #1e293b",
+        background: "var(--c-bg-dark)",
+        borderBottom: "1px solid var(--c-border)",
         flexShrink: 0,
         overflow: "hidden",
       }}
@@ -147,7 +147,7 @@ export default function ViewerToolbar() {
               style={{
                 width: "1px",
                 height: "14px",
-                background: "#1e293b",
+                background: "var(--c-border)",
                 margin: "0 2px",
                 flexShrink: 0,
               }}
@@ -190,16 +190,16 @@ export default function ViewerToolbar() {
         <span
           style={{
             fontSize: "8px",
-            color: "#334155",
+            color: "var(--c-text-muted)",
             fontFamily: "Roboto Mono,monospace",
           }}
         >
-          VP: <span style={{ color: "#22d3ee" }}>{activeVP.toUpperCase()}</span>
+          VP: <span style={{ color: "var(--c-cyan)" }}>{activeVP.toUpperCase()}</span>
         </span>
         <span
           style={{
             fontSize: "8px",
-            color: "#334155",
+            color: "var(--c-text-muted)",
             fontFamily: "Roboto Mono,monospace",
           }}
         >

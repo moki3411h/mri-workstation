@@ -35,7 +35,7 @@ const VPWrapper = ({
         position: 'relative',
         flex: maximized ? '1 1 100%' : '1 1 33.333%',
         height: '100%',
-        border: `1px solid ${isActive ? 'rgba(34,211,238,0.5)' : '#1e293b'}`,
+        border: `1px solid ${isActive ? 'rgba(34,211,238,0.5)' : 'var(--c-border)'}`,
         boxSizing: 'border-box',
         overflow: 'hidden',
         cursor: 'default',
@@ -50,8 +50,8 @@ const VPWrapper = ({
           title="Restore (double-click)"
           style={{
             position:'absolute', top:'5px', right:'5px', zIndex:30,
-            background:'rgba(0,0,0,0.7)', border:'1px solid #263040',
-            color:'#64748b', fontSize:'9px', padding:'2px 6px', cursor:'pointer', borderRadius:'2px',
+            background:'rgba(0,0,0,0.7)', border:'1px solid var(--c-border-bright)',
+            color:'var(--c-text-mid)', fontSize:'9px', padding:'2px 6px', cursor:'pointer', borderRadius:'2px',
           }}
         >
           ⤡ Restore
@@ -66,7 +66,7 @@ export default function ViewportGrid() {
   const [maximized, setMaximized] = useState<Plane | 'blank' | null>(null);
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', width:'100%', height:'100%', background:'#04060a' }}>
+    <div style={{ display:'flex', flexDirection:'column', width:'100%', height:'100%', background:'var(--c-bg-deepest)' }}>
       {/* ── Viewer Toolbar ─────────────────────────────────────────────── */}
       <ViewerToolbar />
 

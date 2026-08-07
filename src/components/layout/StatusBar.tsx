@@ -23,25 +23,25 @@ export default function StatusBar() {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', height: '20px', width: '100%',
-      background: '#060a14', borderTop: '1px solid #1e293b',
+      background: 'var(--c-bg-input)', borderTop: '1px solid var(--c-border)',
       padding: '0 8px', gap: 0, fontSize: '8.5px',
     }}>
       {/* Status message */}
-      <div style={{ flex: 1, color: '#64748b', fontFamily: 'Roboto Mono, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ flex: 1, color: 'var(--c-text-mid)', fontFamily: 'Roboto Mono, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {statusMsg}
       </div>
 
       {/* Segments */}
       {segments.map((seg, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ width: '1px', height: '12px', background: '#1e293b' }} />
-          <span style={{ padding: '0 8px', color: '#334155', fontFamily: 'Roboto Mono, monospace' }}>{seg}</span>
+          <div style={{ width: '1px', height: '12px', background: 'var(--c-border)' }} />
+          <span style={{ padding: '0 8px', color: 'var(--c-text-muted)', fontFamily: 'Roboto Mono, monospace' }}>{seg}</span>
         </div>
       ))}
 
-      <div style={{ width: '1px', height: '12px', background: '#1e293b' }} />
+      <div style={{ width: '1px', height: '12px', background: 'var(--c-border)' }} />
       <div style={{
-        padding: '0 8px', fontFamily: 'Roboto Mono, monospace', color: '#22d3ee', letterSpacing: '1px',
+        padding: '0 8px', fontFamily: 'Roboto Mono, monospace', color: 'var(--c-cyan)', letterSpacing: '1px',
       }}>
         {time}
       </div>

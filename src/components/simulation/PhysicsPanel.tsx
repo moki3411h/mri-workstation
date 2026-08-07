@@ -72,29 +72,29 @@ export default function PhysicsPanel() {
   const Slider = ({ label, key, min, max, unit }: { label:string; key:keyof typeof p; min:number; max:number; unit?:string }) => (
     <div style={{ marginBottom:'8px' }}>
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'9px', marginBottom:'2px' }}>
-        <span style={{ color:'#475569', cursor:'pointer' }} onClick={()=>setLastChanged(key)}>{label}</span>
-        <span style={{ color: lastChanged===key?'#22d3ee':'#64748b', fontFamily:'Roboto Mono,monospace' }}>{p[key]}{unit}</span>
+        <span style={{ color:'var(--c-text-subtle)', cursor:'pointer' }} onClick={()=>setLastChanged(key)}>{label}</span>
+        <span style={{ color: lastChanged===key?'#22d3ee':'var(--c-text-mid)', fontFamily:'Roboto Mono,monospace' }}>{p[key]}{unit}</span>
       </div>
       <input type="range" min={min} max={max} step={key==='thickness'?0.5:1} value={p[key]} onChange={e=>S(key,+e.target.value)} style={{ width:'100%' }} />
     </div>
   );
 
-  const sevColor = (s: string) => s==='high'?'#ef4444':s==='medium'?'#f59e0b':'#64748b';
+  const sevColor = (s: string) => s==='high'?'#ef4444':s==='medium'?'#f59e0b':'var(--c-text-mid)';
 
   return (
-    <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'460px', background:'#0a1220', borderLeft:'1px solid #1e3a5f', zIndex:800, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'-4px 0 24px rgba(0,0,0,0.5)' }}>
+    <div style={{ position:'fixed', top:0, right:0, bottom:0, width:'460px', background:'var(--c-bg-panel)', borderLeft:'1px solid var(--c-border-accent)', zIndex:800, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'-4px 0 24px rgba(0,0,0,0.22)' }}>
       {/* Header */}
-      <div style={{ display:'flex', alignItems:'center', padding:'10px 14px', borderBottom:'1px solid #1e293b', background:'rgba(14,165,233,0.05)', flexShrink:0 }}>
+      <div style={{ display:'flex', alignItems:'center', padding:'10px 14px', borderBottom:'1px solid var(--c-border)', background:'rgba(14,165,233,0.05)', flexShrink:0 }}>
         <div>
-          <div style={{ fontSize:'12px', fontWeight:700, color:'#e2e8f0' }}>🔬 MRI Physics Simulator</div>
-          <div style={{ fontSize:'8.5px', color:'#475569', marginTop:'1px' }}>Adjust parameters to explore MRI physics</div>
+          <div style={{ fontSize:'12px', fontWeight:700, color:'var(--c-text-bright)' }}>🔬 MRI Physics Simulator</div>
+          <div style={{ fontSize:'8.5px', color:'var(--c-text-subtle)', marginTop:'1px' }}>Adjust parameters to explore MRI physics</div>
         </div>
-        <button onClick={togglePhysics} style={{ marginLeft:'auto', background:'transparent', border:'none', color:'#64748b', fontSize:'18px', cursor:'pointer' }}>✕</button>
+        <button onClick={togglePhysics} style={{ marginLeft:'auto', background:'transparent', border:'none', color:'var(--c-text-mid)', fontSize:'18px', cursor:'pointer' }}>✕</button>
       </div>
 
       <div style={{ flex:1, overflowY:'auto', padding:'12px 14px' }}>
         {/* Sliders */}
-        <div style={{ marginBottom:'12px', padding:'10px', background:'#0d1626', border:'1px solid #1e293b', borderRadius:'2px' }}>
+        <div style={{ marginBottom:'12px', padding:'10px', background:'var(--c-bg-card)', border:'1px solid var(--c-border)', borderRadius:'2px' }}>
           <div style={{ fontSize:'8.5px', fontWeight:700, color:'#22d3ee', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' }}>Parameter Controls</div>
           <Slider label="TR (Repetition Time)"  key="tr"         min={50}  max={10000} unit="ms" />
           <Slider label="TE (Echo Time)"        key="te"         min={1}   max={500}   unit="ms" />
@@ -108,33 +108,33 @@ export default function PhysicsPanel() {
 
         {/* Live output cards */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', marginBottom:'12px' }}>
-          <div style={{ background:'#0d1626', border:'1px solid #1e293b', padding:'8px', borderRadius:'2px' }}>
-            <div style={{ fontSize:'7.5px', color:'#475569', marginBottom:'4px' }}>SNR ESTIMATE</div>
+          <div style={{ background:'var(--c-bg-card)', border:'1px solid var(--c-border)', padding:'8px', borderRadius:'2px' }}>
+            <div style={{ fontSize:'7.5px', color:'var(--c-text-subtle)', marginBottom:'4px' }}>SNR ESTIMATE</div>
             <div style={{ fontFamily:'Roboto Mono,monospace', fontSize:'20px', fontWeight:700, color:snrColor }}>{snr}</div>
             <div style={{ fontSize:'8px', color:snrColor, marginTop:'2px' }}>{snrLbl}</div>
           </div>
-          <div style={{ background:'#0d1626', border:'1px solid #1e293b', padding:'8px', borderRadius:'2px' }}>
-            <div style={{ fontSize:'7.5px', color:'#475569', marginBottom:'4px' }}>CONTRAST</div>
+          <div style={{ background:'var(--c-bg-card)', border:'1px solid var(--c-border)', padding:'8px', borderRadius:'2px' }}>
+            <div style={{ fontSize:'7.5px', color:'var(--c-text-subtle)', marginBottom:'4px' }}>CONTRAST</div>
             <div style={{ fontSize:'11px', fontWeight:700, color:'#22d3ee', marginTop:'4px' }}>{contrast}</div>
           </div>
-          <div style={{ background:'#0d1626', border:'1px solid #1e293b', padding:'8px', borderRadius:'2px' }}>
-            <div style={{ fontSize:'7.5px', color:'#475569', marginBottom:'4px' }}>SCAN TIME</div>
+          <div style={{ background:'var(--c-bg-card)', border:'1px solid var(--c-border)', padding:'8px', borderRadius:'2px' }}>
+            <div style={{ fontSize:'7.5px', color:'var(--c-text-subtle)', marginBottom:'4px' }}>SCAN TIME</div>
             <div style={{ fontFamily:'Roboto Mono,monospace', fontSize:'18px', fontWeight:700, color:'#22c55e' }}>{formatTime(taSec)}</div>
           </div>
-          <div style={{ background:'#0d1626', border:'1px solid #1e293b', padding:'8px', borderRadius:'2px' }}>
-            <div style={{ fontSize:'7.5px', color:'#475569', marginBottom:'4px' }}>RESOLUTION</div>
+          <div style={{ background:'var(--c-bg-card)', border:'1px solid var(--c-border)', padding:'8px', borderRadius:'2px' }}>
+            <div style={{ fontSize:'7.5px', color:'var(--c-text-subtle)', marginBottom:'4px' }}>RESOLUTION</div>
             <div style={{ fontFamily:'Roboto Mono,monospace', fontSize:'11px', color:'#f59e0b', marginTop:'4px' }}>{res[0].toFixed(1)}×{res[1].toFixed(1)}×{res[2]}mm</div>
           </div>
         </div>
 
         {/* Artifact warnings */}
         {artifacts.length > 0 && (
-          <div style={{ marginBottom:'12px', padding:'8px', background:'#0d1626', border:'1px solid #1e293b', borderRadius:'2px' }}>
+          <div style={{ marginBottom:'12px', padding:'8px', background:'var(--c-bg-card)', border:'1px solid var(--c-border)', borderRadius:'2px' }}>
             <div style={{ fontSize:'8.5px', fontWeight:700, color:'#f59e0b', marginBottom:'6px' }}>⚠ Potential Artifacts</div>
             {artifacts.map((a, i) => (
-              <div key={i} style={{ display:'flex', gap:'6px', marginBottom:'4px', padding:'4px 6px', background:`${sevColor(a.severity)}10`, border:`1px solid ${sevColor(a.severity)}30`, borderRadius:'2px' }}>
+              <div key={i} style={{ display:'flex', gap:'6px', marginBottom:'4px', padding:'4px 6px', background:`color-mix(in srgb, ${sevColor(a.severity)} 6%, transparent)`, border:`1px solid color-mix(in srgb, ${sevColor(a.severity)} 20%, transparent)`, borderRadius:'2px' }}>
                 <span style={{ fontSize:'8.5px', fontWeight:700, color:sevColor(a.severity), flexShrink:0 }}>{a.type}</span>
-                <span style={{ fontSize:'8.5px', color:'#64748b' }}>{a.description}</span>
+                <span style={{ fontSize:'8.5px', color:'var(--c-text-mid)' }}>{a.description}</span>
               </div>
             ))}
           </div>
@@ -143,12 +143,12 @@ export default function PhysicsPanel() {
         {/* Explanation */}
         <div style={{ marginBottom:'12px', padding:'10px', background:'rgba(14,165,233,0.05)', border:'1px solid rgba(14,165,233,0.15)', borderRadius:'2px' }}>
           <div style={{ fontSize:'8px', fontWeight:700, color:'#22d3ee', marginBottom:'5px', textTransform:'uppercase', letterSpacing:'0.5px' }}>📚 {lastChanged.toUpperCase()} — Education</div>
-          <div style={{ fontSize:'9.5px', color:'#94a3b8', lineHeight:'1.5' }}>{explanation}</div>
+          <div style={{ fontSize:'9.5px', color:'var(--c-text-base)', lineHeight:'1.5' }}>{explanation}</div>
         </div>
 
         {/* Signal curves */}
-        <div style={{ background:'#0d1626', border:'1px solid #1e293b', borderRadius:'2px', overflow:'hidden' }}>
-          <div style={{ fontSize:'8px', color:'#334155', padding:'4px 8px', borderBottom:'1px solid #0d1520' }}>Signal Curves — T1 Recovery (green) & T2 Decay (cyan)</div>
+        <div style={{ background:'var(--c-bg-card)', border:'1px solid var(--c-border)', borderRadius:'2px', overflow:'hidden' }}>
+          <div style={{ fontSize:'8px', color:'var(--c-text-muted)', padding:'4px 8px', borderBottom:'1px solid var(--c-border-faint)' }}>Signal Curves — T1 Recovery (green) & T2 Decay (cyan)</div>
           <canvas ref={curveRef} width={432} height={130} style={{ display:'block', width:'100%' }} />
         </div>
       </div>
