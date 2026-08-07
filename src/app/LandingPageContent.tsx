@@ -2,10 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-// @ts-expect-error bypass TS error for dist
-import gsap from 'gsap/dist/gsap';
-// @ts-expect-error bypass TS error for dist
-import { ScrollTrigger } from 'gsap/dist/ScrollTrigger';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 
 const FRAME_COUNT = 300;
@@ -111,8 +109,8 @@ export default function LandingPage() {
       });
 
       // Animate text sections independently using scroll
-      const textSections = gsap.utils.toArray('.scroll-section');
-      textSections.forEach((section: any, i: number) => {
+      const textSections = gsap.utils.toArray<HTMLElement>('.scroll-section');
+      textSections.forEach((section, i) => {
         gsap.fromTo(
           section,
           { opacity: 0, y: 50 },
