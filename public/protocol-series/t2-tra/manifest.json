@@ -34,7 +34,5 @@
   "rows": 320,
   "columns": 320,
   "sliceThickness": 5.0,
-  "spacingBetweenSlices": 6.5,
-  "seriesDescription": "t2_tse_tra_FIL",
-  "protocolName": "t2_tse_tra"
+  "spacingBetweenSlices": 6.5
 }

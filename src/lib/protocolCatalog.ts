@@ -56,25 +56,32 @@ function sequence(
   description: string,
   ti = 0,
   sarPct = 42,
+  seriesId?: string,
 ): Omit<Sequence, 'id' | 'status'> {
-  return { name, ta, sl, tr, te, ti, flipAngle, sarPct, description };
+  return { name, ta, sl, tr, te, ti, flipAngle, sarPct, description, ...(seriesId ? { seriesId } : {}) };
 }
 
 // Generic, vendor-neutral sequence families. These are educational simulator
 // defaults, not scanner prescriptions or copied manufacturer protocols.
 const SEQUENCE_LIBRARY = {
   localizer: sequence('3-Plane Localizer', '00:18', 3, 20, 5, 25, 'Three-plane positioning reference.', 0, 12),
-  t1Sag: sequence('T1 Spin Echo SAG', '00:42', 24, 560, 11, 90, 'Sagittal T1-weighted anatomy.'),
+  brainLocalizer: sequence('SCOUT 3-PLANE', '00:18', 3, 20, 5, 25, 'Three-plane brain positioning reference.', 0, 12, 'scout-brain'),
+  t1Sag: sequence('T1 Spin Echo SAG', '00:42', 23, 560, 11, 90, 'Sagittal T1-weighted anatomy.', 0, 42, 't1-sag'),
   t1Ax: sequence('T1 Spin Echo AX', '00:44', 28, 580, 12, 90, 'Axial T1-weighted anatomy.'),
+  t1TseBrain: sequence('T1 TSE AX', '00:44', 21, 560, 11, 150, 'Axial T1-weighted spin-echo brain stack.', 0, 52, 't1-tse-ax'),
+  t1PreBrain: sequence('T1 PRE-CONTRAST FS AX', '00:45', 27, 563, 11, 90, 'Pre-contrast fat-suppressed axial T1-weighted reference.', 0, 58, 't1-pre-fs-ax'),
   t1Cor: sequence('T1 Spin Echo COR', '00:44', 28, 580, 12, 90, 'Coronal T1-weighted anatomy.'),
-  t2Ax: sequence('T2 Fast Spin Echo AX', '00:52', 28, 5200, 96, 150, 'Axial T2-weighted fluid-sensitive imaging.', 0, 58),
-  t2Cor: sequence('T2 Fast Spin Echo COR', '00:52', 28, 5200, 96, 150, 'Coronal T2-weighted fluid-sensitive imaging.', 0, 58),
+  t2Ax: sequence('T2 Fast Spin Echo AX', '00:52', 23, 5200, 96, 150, 'Axial T2-weighted fluid-sensitive imaging.', 0, 58, 't2-tra'),
+  t2Cor: sequence('T2 Fast Spin Echo COR', '00:52', 28, 5200, 96, 150, 'Coronal T2-weighted fluid-sensitive imaging.', 0, 58, 't2-cor'),
   t2Sag: sequence('T2 Fast Spin Echo SAG', '00:52', 24, 4800, 94, 150, 'Sagittal T2-weighted fluid-sensitive imaging.', 0, 58),
-  flairAx: sequence('T2 FLAIR AX', '00:58', 28, 9000, 92, 150, 'Axial fluid-attenuated T2-weighted imaging.', 2500, 64),
+  flairAx: sequence('T2 FLAIR AX', '00:58', 21, 9000, 92, 150, 'Axial fluid-attenuated T2-weighted imaging.', 2500, 64, 'flair-tra'),
   flair3d: sequence('3D T2 FLAIR ISO', '01:08', 176, 5000, 380, 120, 'Isotropic fluid-attenuated volume imaging.', 1650, 66),
-  dwiBrain: sequence('Diffusion EPI AX + ADC', '00:42', 30, 4700, 82, 90, 'Diffusion-weighted brain imaging with ADC map.', 0, 34),
-  swi: sequence('Susceptibility GRE AX', '00:54', 64, 29, 21, 15, 'Susceptibility-sensitive venous and blood-product imaging.', 0, 18),
-  t1Volume: sequence('3D T1 Gradient Echo ISO', '01:04', 176, 1900, 2.8, 9, 'Isotropic T1-weighted volume for multiplanar reformats.', 900, 24),
+  dwiBrain: sequence('DWI AX + ADC SOURCE', '00:42', 69, 4700, 82, 90, 'Diffusion-weighted brain source stack.', 0, 34, 'dwi-ax'),
+  adcBrain: sequence('ADC MAP AX', '00:34', 23, 4700, 82, 90, 'Apparent diffusion coefficient map stack.', 0, 28, 'adc-ax'),
+  swi: sequence('SWI AX', '00:54', 60, 29, 21, 15, 'Susceptibility-sensitive venous and blood-product imaging.', 0, 18, 'swi-ax'),
+  t1Volume: sequence('T1 MPRAGE SAG 3D', '01:04', 37, 1900, 2.8, 9, 'Three-dimensional sagittal T1-weighted volume.', 900, 24, 't1-3d-sag'),
+  postCorBrain: sequence('T1 POST-CONTRAST FS COR', '00:58', 29, 610, 12, 90, 'Post-contrast fat-suppressed coronal T1-weighted stack.', 0, 52, 't1-post-fs-cor'),
+  postSagBrain: sequence('T1 POST-CONTRAST FS SAG', '01:08', 96, 6.2, 2.6, 12, 'Post-contrast fat-suppressed sagittal 3D T1-weighted stack.', 0, 22, 't1-post-fs-sag'),
   postBrain: sequence('T1 Fat-Suppressed POST 3-Plane', '01:12', 84, 610, 12, 90, 'Post-contrast T1-weighted multiplanar coverage.', 0, 52),
   perfusionBrain: sequence('Dynamic Susceptibility Perfusion', '00:52', 24, 1600, 34, 70, 'Dynamic perfusion source images and maps.', 0, 28),
   spectroscopy: sequence('Single-Voxel MR Spectroscopy', '01:20', 1, 2000, 35, 90, 'Educational localized proton spectroscopy acquisition.', 0, 20),
@@ -156,11 +163,11 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
   {
     id: 'neuro-head', name: 'Neuro & Head', icon: '◉', description: 'Brain, cranial nerve, CSF, neurovascular, and focused intracranial studies.',
     groups: [
-      group('Core Brain', 'General structural brain examination.', ['localizer','t1Sag','t2Ax','flairAx','dwiBrain','swi'], ['Routine Brain','Rapid Brain','Brain Screening','Headache Survey','Cognitive Change','Hydrocephalus Follow-up']),
-      group('Acute & Trauma', 'Time-conscious brain assessment with diffusion and blood-product sensitivity.', ['localizer','dwiBrain','flairAx','swi','tofHead'], ['Acute Stroke','Transient Neurologic Symptoms','Brain Trauma','Suspected Hemorrhage','Hypoxic Injury','Emergency Brain']),
-      group('Inflammation & Seizure', 'Expanded lesion-sensitive neuro examination.', ['localizer','t1Volume','t2Ax','flair3d','dwiBrain','swi','postBrain'], ['Demyelinating Disease','Seizure Focus','Encephalitis','Autoimmune Brain','Infection Follow-up'], { contrast:'Contrast optional' }),
-      group('Oncology & Focused', 'High-detail pre/post-contrast intracranial assessment.', ['localizer','t1Volume','t2Ax','flair3d','dwiBrain','swi','perfusionBrain','postBrain'], ['Primary Brain Tumor','Metastatic Brain Survey','Post-Treatment Brain','Pituitary and Sella','Internal Auditory Canals','Cranial Nerve Survey'], { contrast:'With contrast' }),
-      group('Flow & Advanced', 'Specialized neurovascular and physiologic imaging.', ['localizer','t1Volume','tofHead','mrVeno','csfFlow'], ['Intracranial Arterial Survey','Cerebral Venography','CSF Flow Study','Preoperative Mapping','Neuro Spectroscopy','Diffusion Tensor Planning'], { tags:['advanced'] }),
+      group('Core Brain', 'Complete structural brain examination with every bundled scrollable image stack.', ['brainLocalizer','t1Sag','t2Cor','t2Ax','flairAx','dwiBrain','adcBrain','swi','t1TseBrain','t1Volume','t1PreBrain','postCorBrain','postSagBrain'], ['Routine Brain','Rapid Brain','Brain Screening','Headache Survey','Cognitive Change','Hydrocephalus Follow-up'], { contrast:'Contrast optional' }),
+      group('Acute & Trauma', 'Time-conscious brain assessment with diffusion and blood-product sensitivity.', ['brainLocalizer','dwiBrain','adcBrain','flairAx','swi','tofHead'], ['Acute Stroke','Transient Neurologic Symptoms','Brain Trauma','Suspected Hemorrhage','Hypoxic Injury','Emergency Brain']),
+      group('Inflammation & Seizure', 'Expanded lesion-sensitive neuro examination.', ['brainLocalizer','t1Volume','t2Ax','flair3d','dwiBrain','adcBrain','swi','postCorBrain','postSagBrain'], ['Demyelinating Disease','Seizure Focus','Encephalitis','Autoimmune Brain','Infection Follow-up'], { contrast:'Contrast optional' }),
+      group('Oncology & Focused', 'High-detail pre/post-contrast intracranial assessment.', ['brainLocalizer','t1Volume','t1PreBrain','t2Ax','flair3d','dwiBrain','adcBrain','swi','perfusionBrain','postCorBrain','postSagBrain'], ['Primary Brain Tumor','Metastatic Brain Survey','Post-Treatment Brain','Pituitary and Sella','Internal Auditory Canals','Cranial Nerve Survey'], { contrast:'With contrast' }),
+      group('Flow & Advanced', 'Specialized neurovascular and physiologic imaging.', ['brainLocalizer','t1Volume','tofHead','mrVeno','csfFlow'], ['Intracranial Arterial Survey','Cerebral Venography','CSF Flow Study','Preoperative Mapping','Neuro Spectroscopy','Diffusion Tensor Planning'], { tags:['advanced'] }),
     ],
   },
   {

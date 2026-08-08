@@ -32,7 +32,5 @@
   "rows": 512,
   "columns": 408,
   "sliceThickness": 5.0,
-  "spacingBetweenSlices": 7.5,
-  "seriesDescription": "t2_flair_ tra_FIL",
-  "protocolName": "t2_flair_ tra"
+  "spacingBetweenSlices": 7.5
 }

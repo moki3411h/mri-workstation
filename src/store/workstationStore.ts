@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { SEQUENCES, type Sequence, calculateTA, formatTime } from '@/lib/scanEngine';
 import { calcSNR, getContrastType, calcResolution } from '@/lib/physics';
 import { eulerToMatrix } from '@/lib/geometry';
-import type { ProtocolImageSeries } from '@/lib/protocolSeries';
+import { getProtocolSeries, type ProtocolImageSeries } from '@/lib/protocolSeries';
 import { materializeProtocolSequences, type ProtocolPreset } from '@/lib/protocolCatalog';
 
 // ── Types ──────────────────────────────────────────────────
@@ -347,6 +347,9 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     );
     const seq = selected ?? sequences.find(s => s.status === 'active' || s.status === 'pending');
     if (!seq) { set({ statusMsg: 'All sequences completed!' }); return; }
+
+    const bundledSeries = getProtocolSeries(seq);
+    if (bundledSeries) get().setImageSeries(bundledSeries);
 
     const newSeqs = sequences.map(s =>
       s.id === seq.id ? { ...s, status: 'scanning' as const } : s

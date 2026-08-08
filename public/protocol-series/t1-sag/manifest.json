@@ -34,7 +34,5 @@
   "rows": 512,
   "columns": 512,
   "sliceThickness": 5.0,
-  "spacingBetweenSlices": 6.5,
-  "seriesDescription": "t1_se_sag_FIL",
-  "protocolName": "t1_se_sag"
+  "spacingBetweenSlices": 6.5
 }

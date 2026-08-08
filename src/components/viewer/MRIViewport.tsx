@@ -430,11 +430,12 @@ export default function MRIViewport({ plane }: Props) {
     e.preventDefault();
     (e.currentTarget as HTMLElement).classList.remove('drag-over');
     const sequenceId = Number(e.dataTransfer.getData(PROTOCOL_SERIES_MIME));
+    const store = useWorkstationStore.getState();
+    const sequence = store.sequences.find(item => item.id === sequenceId);
     const protocolSeries = Number.isFinite(sequenceId) && sequenceId > 0
-      ? getProtocolSeries(sequenceId)
+      ? getProtocolSeries(sequence ?? sequenceId)
       : undefined;
     if (protocolSeries) {
-      const store = useWorkstationStore.getState();
       store.setImageSeries(protocolSeries);
       toast(
         `${protocolSeries.name}: ${protocolSeries.frameCount} images loaded into ${PLANE_LABEL[protocolSeries.plane]}`,
@@ -445,7 +446,6 @@ export default function MRIViewport({ plane }: Props) {
 
     const file = e.dataTransfer.files[0];
     if (!file) return;
-    const store = useWorkstationStore.getState();
 
     const loadImage = (url: string) => {
       store.setImageAll(url);

@@ -87,7 +87,7 @@ const QueueRow = memo(function QueueRow({
   onDragStart, onDragOver, onDrop, onOpenSeries, dragOverId,
 }: RowProps) {
   const cfg = STATUS_CONFIG[seq.status];
-  const series = getProtocolSeries(seq.id);
+  const series = getProtocolSeries(seq);
   const isScanning = seq.status === 'scanning';
   const sarColor = seq.sarPct >= 90 ? 'var(--c-red)' : seq.sarPct >= 70 ? 'var(--c-amber)' : 'var(--c-green)';
   const isDragOver = dragOverId === seq.id;
@@ -271,7 +271,8 @@ export default function ProtocolQueue() {
     dragId.current = id;
     e.dataTransfer.effectAllowed = 'copyMove';
     e.dataTransfer.setData('text/plain', String(id));
-    const series = getProtocolSeries(id);
+    const sequence = useWorkstationStore.getState().sequences.find(item => item.id === id);
+    const series = sequence ? getProtocolSeries(sequence) : getProtocolSeries(id);
     if (series) e.dataTransfer.setData(PROTOCOL_SERIES_MIME, String(id));
   }, []);
 
@@ -291,7 +292,8 @@ export default function ProtocolQueue() {
   }, [reorderSeq]);
 
   const handleOpenSeries = useCallback((id: number) => {
-    const series = getProtocolSeries(id);
+    const sequence = useWorkstationStore.getState().sequences.find(item => item.id === id);
+    const series = sequence ? getProtocolSeries(sequence) : getProtocolSeries(id);
     if (!series) return;
     setImageSeries(series);
     toast(`${series.name}: ${series.frameCount} images loaded into ${series.plane.toUpperCase()}`, 'success');

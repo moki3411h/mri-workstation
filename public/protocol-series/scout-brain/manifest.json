@@ -1,0 +1,18 @@
+{
+  "id": "scout-brain",
+  "sequenceId": 1,
+  "name": "SCOUT 3-PLANE",
+  "plane": "axial",
+  "frameCount": 3,
+  "fps": 3,
+  "thumbnail": "/protocol-series/scout-brain/frame-002.webp",
+  "frames": [
+    "/protocol-series/scout-brain/frame-001.webp",
+    "/protocol-series/scout-brain/frame-002.webp",
+    "/protocol-series/scout-brain/frame-003.webp"
+  ],
+  "rows": 512,
+  "columns": 512,
+  "sliceThickness": 8.0,
+  "spacingBetweenSlices": 9.6
+}
