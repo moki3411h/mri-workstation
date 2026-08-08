@@ -114,6 +114,7 @@ export interface WorkstationStore {
   // THE ONE PLANNING OBJECT
   planning: PlanningObject;
   planningActive: boolean;  // false until first image loaded
+  planningOverlayVisible: boolean; // visible only while prescribing a newly placed image
 
   // Viewport state
   xhair:    Record<Plane, XhairState>;
@@ -171,7 +172,7 @@ export interface WorkstationStore {
   setActiveVP:      (plane: Plane) => void;
   setImage:         (plane: Plane, url: string | null) => void;
   setImageAll:      (url: string) => void;
-  setImageSeries:   (series: ProtocolImageSeries) => void;
+  setImageSeries:   (series: ProtocolImageSeries, activatePlanning?: boolean) => void;
   setShow:          (key: keyof WorkstationStore['show'], value: boolean) => void;
   setPatient:       (patient: Partial<PatientState>) => void;
   setSafety:        (safety: Partial<SafetyState>) => void;
@@ -288,6 +289,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
 
   planning:       { ...defaultPlanning },
   planningActive: false,
+  planningOverlayVisible: false,
 
   xhair:    { coronal: { ...defaultXhair }, sagittal: { ...defaultXhair }, axial: { ...defaultXhair } },
   wl:       { coronal: { ...defaultWL }, sagittal: { ...defaultWL }, axial: { ...defaultWL } },
@@ -338,7 +340,11 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     if (scan.running && !scan.paused) return;
 
     if (scan.paused && scan.seqId) {
-      set({ scan: { ...scan, paused: false }, statusMsg: 'Scan resumed' });
+      set({
+        scan: { ...scan, paused: false },
+        planningOverlayVisible: false,
+        statusMsg: 'Scan resumed',
+      });
       return;
     }
 
@@ -349,7 +355,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     if (!seq) { set({ statusMsg: 'All sequences completed!' }); return; }
 
     const bundledSeries = getProtocolSeries(seq);
-    if (bundledSeries) get().setImageSeries(bundledSeries);
+    if (bundledSeries) get().setImageSeries(bundledSeries, false);
 
     const newSeqs = sequences.map(s =>
       s.id === seq.id ? { ...s, status: 'scanning' as const } : s
@@ -359,6 +365,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
       sequences: newSeqs,
       scan: { running: true, paused: false, seqId: seq.id, progress: 0, remainSec: taSec },
       selectedSeqId: seq.id,
+      planningOverlayVisible: false,
       statusMsg: `Scanning: ${seq.name}`,
     });
   },
@@ -457,7 +464,13 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
       const newImages = { ...s.images, [plane]: url };
       const newSeries = { ...s.imageSeries, [plane]: null };
       const hasAny = Object.values(newImages).some(v => v !== null);
-      return { images: newImages, imageSeries: newSeries, planningActive: hasAny };
+      return {
+        images: newImages,
+        imageSeries: newSeries,
+        planningActive: hasAny,
+        planningOverlayVisible: url ? true : (hasAny && s.planningOverlayVisible),
+        show: url ? { ...s.show, fov: true } : s.show,
+      };
     });
   },
 
@@ -466,11 +479,13 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
       images: { coronal: url, sagittal: url, axial: url },
       imageSeries: { coronal: null, sagittal: null, axial: null },
       planningActive: true,
+      planningOverlayVisible: true,
+      show: { ...get().show, fov: true },
       statusMsg: 'Image loaded — Planning active',
     });
   },
 
-  setImageSeries: (series) => {
+  setImageSeries: (series, activatePlanning = true) => {
     const state = get();
     const sequence = state.sequences.find(item => item.id === series.sequenceId);
     const nextParams = sequence
@@ -491,6 +506,8 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
       imageSeries: { ...state.imageSeries, [series.plane]: series },
       activeVP: series.plane,
       planningActive: true,
+      planningOverlayVisible: activatePlanning,
+      show: activatePlanning ? { ...state.show, fov: true } : state.show,
       statusMsg: `${series.name}: ${series.frameCount} DICOM images loaded into ${series.plane.toUpperCase()} planning`,
       ...computed,
     });
@@ -587,6 +604,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
       planning,
       patient: { ...get().patient, study: `MRI Pro — ${protocol.name}` },
       cineMode: false,
+      planningOverlayVisible: false,
       statusMsg: `Loaded ${protocol.name}: ${sequences.length} sequences · TA ${protocol.estimatedTime}`,
       ...computePhysics(params, planning),
     });
@@ -598,6 +616,7 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     sequences: snap.sequences,
     params:    snap.params,
     planning:  snap.planning ?? { ...defaultPlanning },
+    planningOverlayVisible: false,
     wl:        snap.wl,
     show:      snap.show,
     statusMsg: `Exam loaded: ${snap.patient.name} — ${new Date(snap.savedAt).toLocaleString()}`,

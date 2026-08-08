@@ -191,6 +191,7 @@ export default function MRIViewport({ plane }: Props) {
 
     // ── Left Click → FOV or blank ──
     if (e.button !== 0) return;
+    if (!store.planningOverlayVisible) return;
 
     const targetPlane = getPlanningTargetPlane(store.planning);
     const isTarget = targetPlane === plane;
@@ -364,7 +365,7 @@ export default function MRIViewport({ plane }: Props) {
       }
     } else {
       // Hover: update cursor
-      if (!state.planningActive) { c.style.cursor = 'default'; return; }
+      if (!state.planningActive || !state.planningOverlayVisible) { c.style.cursor = 'default'; return; }
       
       const handles = getFovHandles2D(state.planning, plane, c.width, c.height, getPlanningTargetPlane(state.planning) === plane);
       const hitResult = hitTestFov(pos.x * c.width, pos.y * c.height, handles);
@@ -399,6 +400,9 @@ export default function MRIViewport({ plane }: Props) {
     const d = e.deltaY > 0 ? -1 : 1;
     const state = useWorkstationStore.getState();
     if (!state.planningActive) return;
+
+    const planningModifier = e.ctrlKey || e.metaKey || e.shiftKey || e.altKey;
+    if (planningModifier && !state.planningOverlayVisible) return;
 
     if (e.ctrlKey || e.metaKey) {
       // FOV Read
@@ -490,6 +494,7 @@ export default function MRIViewport({ plane }: Props) {
         case 'ArrowLeft':
         case 'ArrowRight': {
           e.preventDefault();
+          if (!store.planningOverlayVisible) break;
           const c = canvasRef.current!;
           const step = e.shiftKey ? 10 : 1;
           let dx = 0, dy = 0;
@@ -510,7 +515,9 @@ export default function MRIViewport({ plane }: Props) {
 
   // ── Rendering ─────────────────────────────────────────────
 
-  const showFov = useWorkstationStore(s => s.show.fov);
+  const showFov = useWorkstationStore(
+    s => s.show.fov && s.planningOverlayVisible && !s.scan.running,
+  );
 
   const renderGrid = useCallback((ctx: CanvasRenderingContext2D, W: number, H: number, isDark: boolean) => {
     const gridColor = isDark ? '#0d1e30' : '#d0dae8';

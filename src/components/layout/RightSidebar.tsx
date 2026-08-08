@@ -16,7 +16,7 @@ const _3D_MODES = ['MPR','MIP','MinIP','VRT','SSD'];
 export default function RightSidebar() {
   const {
     scan, patient, safety, sequences, selectedSeqId,
-    show, setShow, wl, setWL, stopScan,
+    show, setShow, wl, setWL, stopScan, planningOverlayVisible,
   } = useWorkstationStore();
 
   const [tab, setTab] = useState(0);
@@ -130,8 +130,14 @@ export default function RightSidebar() {
               ['Slice Markers', 'sliceMarkers'],
               ['Ref Lines',     'referenceLines'],
             ] as [string, keyof typeof show][]).map(([label, key])=>(
-              <label key={key} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'2px 0', cursor:'pointer', fontSize:'9px', color:'var(--c-text-mid)' }}>
-                <input type="checkbox" checked={show[key]} onChange={e=>setShow(key, e.target.checked)} style={{ accentColor:'var(--c-cyan)' }} />
+              <label key={key} style={{ display:'flex', alignItems:'center', gap:'6px', padding:'2px 0', cursor:key === 'fov' && !planningOverlayVisible ? 'not-allowed' : 'pointer', fontSize:'9px', color:'var(--c-text-mid)', opacity:key === 'fov' && !planningOverlayVisible ? 0.45 : 1 }}>
+                <input
+                  type="checkbox"
+                  checked={key === 'fov' ? planningOverlayVisible && show.fov : show[key]}
+                  disabled={key === 'fov' && !planningOverlayVisible}
+                  onChange={e=>setShow(key, e.target.checked)}
+                  style={{ accentColor:'var(--c-cyan)' }}
+                />
                 {label}
               </label>
             ))}

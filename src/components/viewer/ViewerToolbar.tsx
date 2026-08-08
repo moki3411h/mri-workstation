@@ -8,6 +8,7 @@ interface ToolBtn {
   icon: string;
   label: string;
   action?: () => void;
+  disabled?: boolean;
   separator?: false;
 }
 interface Sep {
@@ -34,7 +35,7 @@ const BtnStyle = (active: boolean, color = "var(--c-cyan)") => ({
 });
 
 export default function ViewerToolbar() {
-  const { resetAll, setShow, show, setWL, activeVP, wl } =
+  const { resetAll, setShow, show, setWL, activeVP, wl, planningOverlayVisible } =
     useWorkstationStore();
 
   const handleReset = useCallback(() => {
@@ -114,6 +115,7 @@ export default function ViewerToolbar() {
       icon: "⬜",
       label: "FoV Box",
       action: () => setShow("fov", !show.fov),
+      disabled: !planningOverlayVisible,
     },
     {
       id: "reflines",
@@ -158,18 +160,23 @@ export default function ViewerToolbar() {
         const isActiveOverlay =
           (btn.id === "labels" && show.labels) ||
           (btn.id === "xhair-ov" && show.xhair) ||
-          (btn.id === "fovbox" && show.fov) ||
+          (btn.id === "fovbox" && planningOverlayVisible && show.fov) ||
           (btn.id === "reflines" && show.referenceLines);
         const isActive = isActiveOverlay;
 
         return (
           <button
             key={btn.id}
+            disabled={btn.disabled}
             onClick={() => {
               if (btn.action) btn.action();
             }}
-            title={btn.label}
-            style={BtnStyle(isActive)}
+            title={btn.disabled ? `${btn.label} — place an image into planning first` : btn.label}
+            style={{
+              ...BtnStyle(isActive),
+              cursor: btn.disabled ? "not-allowed" : "pointer",
+              opacity: btn.disabled ? 0.35 : 1,
+            }}
           >
             <span style={{ fontSize: "10px" }}>{btn.icon}</span>
             <span style={{ fontSize: "8.5px" }}>{btn.label}</span>
