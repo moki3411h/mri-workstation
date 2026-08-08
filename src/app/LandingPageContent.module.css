@@ -80,7 +80,7 @@
 .nav {
   display: flex;
   align-items: center;
-  gap: 30px;
+  gap: 24px;
 }
 
 .nav a {
@@ -149,6 +149,7 @@
   height: 100%;
   opacity: 0.72;
   filter: contrast(1.08) saturate(0.88) hue-rotate(182deg) drop-shadow(0 0 40px rgba(39, 216, 242, 0.16));
+  will-change: contents;
 }
 
 .sceneShade {
@@ -503,6 +504,7 @@
   padding: 150px 0;
   content-visibility: auto;
   contain-intrinsic-size: 900px;
+  scroll-margin-top: 96px;
 }
 
 .sectionIntro {
@@ -701,6 +703,199 @@
 .sequenceList div:first-child { background: rgba(39, 216, 242, 0.08); }
 .sequenceList div:first-child em { color: #45d9ef; }
 
+.anatomySection {
+  width: 100%;
+  max-width: none;
+  padding: 140px max(24px, calc((100vw - 1180px) / 2));
+  border-top: 1px solid rgba(117, 154, 189, 0.1);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(32, 139, 184, 0.1), transparent 34%),
+    linear-gradient(180deg, #02060b 0%, #050b13 48%, #02060b 100%);
+}
+
+.anatomyIntro {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 80px;
+  align-items: end;
+  margin-bottom: 58px;
+}
+
+.anatomyIntro h2 {
+  max-width: 760px;
+  margin-top: 18px;
+  color: white;
+  font-size: clamp(42px, 5.1vw, 74px);
+  font-weight: 640;
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.anatomyIntro > p {
+  color: #8495aa;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.regionGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.regionCard {
+  position: relative;
+  min-height: 310px;
+  overflow: hidden;
+  border: 1px solid rgba(120, 161, 197, 0.16);
+  border-radius: 22px;
+  background: #050b13;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035), 0 24px 70px rgba(0, 0, 0, 0.18);
+  isolation: isolate;
+  transition: border-color 260ms ease, box-shadow 260ms ease, transform 260ms ease;
+}
+
+.regionCard[data-region="spine"],
+.regionCard[data-region="cardiac"] {
+  grid-column: span 2;
+  min-height: 410px;
+}
+
+.regionCard:hover {
+  border-color: rgba(62, 213, 237, 0.38);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.055), 0 30px 80px rgba(0, 0, 0, 0.3);
+  transform: translateY(-4px);
+}
+
+.regionMedia,
+.regionScrim {
+  position: absolute;
+  inset: 0;
+}
+
+.regionMedia img {
+  object-fit: cover;
+  filter: grayscale(1) contrast(1.12) brightness(0.72) sepia(0.09) hue-rotate(152deg) saturate(1.2);
+  transform: scale(1.015);
+  transition: filter 420ms ease, transform 700ms cubic-bezier(0.2, 0.75, 0.2, 1);
+}
+
+.regionCard[data-region="spine"] .regionMedia img { object-position: 50% 52%; }
+.regionCard[data-region="cardiac"] .regionMedia img { object-position: center; }
+.regionCard[data-region="abdomen"] .regionMedia img { object-position: 50% 43%; }
+.regionCard[data-region="pelvis"] .regionMedia img { object-position: 52% 50%; }
+.regionCard[data-region="msk"] .regionMedia img { object-position: 50% 46%; }
+.regionCard[data-region="brain"] .regionMedia img { object-position: center; }
+
+.regionCard:hover .regionMedia img {
+  filter: grayscale(1) contrast(1.16) brightness(0.83) sepia(0.08) hue-rotate(152deg) saturate(1.28);
+  transform: scale(1.055);
+}
+
+.regionScrim {
+  background:
+    linear-gradient(180deg, rgba(2, 6, 11, 0.25) 0%, rgba(2, 6, 11, 0.06) 35%, rgba(2, 6, 11, 0.96) 93%),
+    linear-gradient(110deg, rgba(4, 11, 19, 0.52), transparent 54%);
+}
+
+.regionTopline {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  left: 18px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.regionTopline span,
+.regionTopline em {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(128, 173, 207, 0.17);
+  border-radius: 999px;
+  background: rgba(3, 10, 18, 0.72);
+  color: #adbfce;
+  font-family: "Roboto Mono", monospace;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  backdrop-filter: blur(10px);
+}
+
+.regionTopline span { color: #75e7f8; }
+.regionTopline svg { filter: drop-shadow(0 0 9px rgba(39, 216, 242, 0.5)); }
+
+.regionContent {
+  position: absolute;
+  right: 22px;
+  bottom: 22px;
+  left: 22px;
+  z-index: 2;
+}
+
+.regionContent h3 {
+  margin: 0;
+  color: white;
+  font-size: clamp(25px, 2.4vw, 36px);
+  font-weight: 630;
+  letter-spacing: -0.04em;
+}
+
+.regionContent p {
+  max-width: 480px;
+  margin-top: 8px;
+  color: #93a3b6;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.regionProtocols {
+  display: block;
+  margin-top: 14px;
+  color: #52c8dd;
+  font-family: "Roboto Mono", monospace;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.anatomyNote {
+  margin-top: 18px;
+  color: #41566c;
+  font-family: "Roboto Mono", monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-align: right;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(28px) scale(0.985);
+  transition:
+    opacity 680ms ease,
+    transform 760ms cubic-bezier(0.2, 0.75, 0.2, 1),
+    border-color 260ms ease,
+    box-shadow 260ms ease;
+}
+
+.revealVisible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.regionCard:nth-child(2) { transition-delay: 70ms; }
+.regionCard:nth-child(3) { transition-delay: 120ms; }
+.regionCard:nth-child(4) { transition-delay: 170ms; }
+.regionCard:nth-child(5) { transition-delay: 220ms; }
+.regionCard:nth-child(6) { transition-delay: 270ms; }
+
 .workflowSection {
   width: 100%;
   max-width: none;
@@ -859,6 +1054,40 @@
 .footerCredit small { color: #3f5369; font-size: 7px; letter-spacing: 0.12em; text-transform: uppercase; }
 .footerCredit strong { color: #8498ae; font-size: 9px; letter-spacing: 0.1em; }
 
+.imageCredits {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 14px 0 22px;
+  border-top: 1px solid rgba(117, 154, 189, 0.08);
+  color: #41566c;
+}
+
+.imageCredits summary {
+  width: fit-content;
+  cursor: pointer;
+  font-family: "Roboto Mono", monospace;
+  font-size: 7px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.imageCredits p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 16px;
+  margin-top: 12px;
+  text-align: left;
+}
+
+.imageCredits a {
+  color: #688098;
+  font-size: 8px;
+  text-decoration: none;
+}
+
+.imageCredits a:hover { color: #55d7eb; }
+.imageCredits > small { display: block; margin-top: 8px; color: #34475b; font-size: 7px; }
+
 @keyframes pulse {
   0%, 100% { opacity: 0.45; transform: scale(0.85); }
   50% { opacity: 1; transform: scale(1); }
@@ -870,12 +1099,16 @@
   .storyPanel { width: min(100% - 32px, 720px); }
   .sceneShade { background: linear-gradient(90deg, rgba(1, 4, 9, 0.92), rgba(1, 4, 9, 0.4)), linear-gradient(180deg, rgba(1, 4, 9, 0.2), transparent 50%, rgba(1, 4, 9, 0.8)); }
   .sectionIntro { grid-template-columns: 1fr; gap: 28px; }
+  .anatomyIntro { grid-template-columns: 1fr; gap: 28px; }
   .featureGrid { grid-template-columns: 1fr; }
   .featureCardLarge { min-height: 540px; }
   .workflowGrid { grid-template-columns: repeat(2, 1fr); }
   .workflowGrid article:nth-child(2) { border-right: 0; }
   .workflowGrid article:nth-child(-n + 2) { border-bottom: 1px solid rgba(117, 154, 189, 0.15); }
   .educationSection { grid-template-columns: 1fr; gap: 60px; }
+  .regionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .regionCard[data-region="spine"],
+  .regionCard[data-region="cardiac"] { grid-column: span 1; min-height: 350px; }
   .footer { grid-template-columns: 1fr auto; }
   .footer p { display: none; }
 }
@@ -901,10 +1134,17 @@
   .capabilityStrip { justify-content: flex-start; overflow: hidden; white-space: nowrap; }
   .section { width: calc(100% - 32px); padding: 100px 0; }
   .sectionIntro h2, .workflowHeading h2, .educationCopy h2, .finalCta h2 { font-size: 42px; }
+  .anatomyIntro h2 { font-size: 42px; }
   .featureCard, .featureCardLarge, .viewerCard, .queueCard { min-height: 470px; }
   .featureContent { right: 24px; bottom: 24px; left: 24px; }
   .physicsCard, .queueCard { padding: 24px; }
   .workflowSection { width: 100%; padding: 100px 16px; }
+  .anatomySection { width: 100%; padding: 100px 16px; }
+  .regionGrid { grid-template-columns: 1fr; }
+  .regionCard,
+  .regionCard[data-region="spine"],
+  .regionCard[data-region="cardiac"] { min-height: 380px; }
+  .anatomyNote { text-align: left; line-height: 1.6; }
   .workflowGrid { grid-template-columns: 1fr; }
   .workflowGrid article { min-height: 220px; border-right: 0; border-bottom: 1px solid rgba(117, 154, 189, 0.15); }
   .workflowGrid article:last-child { border-bottom: 0; }
@@ -913,6 +1153,7 @@
   .finalCta { width: calc(100% - 24px); margin-bottom: 40px; padding: 80px 20px; border-radius: 24px; }
   .footer { width: calc(100% - 32px); grid-template-columns: 1fr; gap: 14px; padding: 20px 0; }
   .footerCredit { justify-self: start; }
+  .imageCredits { padding-bottom: 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -922,4 +1163,6 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+
+  .reveal { opacity: 1; transform: none; }
 }

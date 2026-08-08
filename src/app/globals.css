@@ -70,6 +70,7 @@
 
 html, body {
   min-height: 100vh;
+  scroll-behavior: smooth;
   background: var(--c-bg-deepest);
   color: var(--c-text-base);
   font-family: var(--c-font-ui);
@@ -78,6 +79,10 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   cursor: default;
   user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html, body { scroll-behavior: auto; }
 }
 
 #workstation {

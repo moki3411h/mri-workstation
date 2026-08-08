@@ -7,12 +7,13 @@ import {
   Activity,
   ArrowDown,
   ArrowRight,
+  Bone,
   Brain,
   CheckCircle2,
   Gauge,
   GraduationCap,
+  HeartPulse,
   Layers3,
-  Monitor,
   ScanLine,
   ShieldCheck,
   Sparkles,
@@ -33,6 +34,76 @@ const workflowSteps = [
   ['04', 'Simulate', 'Run the exam and observe timing, SAR, RF, and progress.'],
 ];
 
+const anatomyRegions = [
+  {
+    id: 'spine',
+    label: 'SPINE MRI',
+    title: 'Spine',
+    description: 'Cervical, thoracic, lumbar, and whole-spine planning across sagittal and axial planes.',
+    protocols: 'T1 · T2 · STIR · MYELO',
+    plane: 'SAGITTAL',
+    image: '/landing/anatomy/spine-mri.webp',
+    alt: 'Sagittal lumbar spine MRI',
+    icon: Bone,
+  },
+  {
+    id: 'cardiac',
+    label: 'CARDIAC MRI',
+    title: 'Cardiac',
+    description: 'Cine-oriented cardiac workflow for ventricular anatomy, function, and chamber planning.',
+    protocols: 'CINE · MORPHOLOGY · FLOW',
+    plane: 'AXIAL CINE',
+    image: '/landing/anatomy/cardiac-mri.webp',
+    alt: 'Animated axial cardiac MRI showing a beating heart',
+    icon: HeartPulse,
+    animated: true,
+  },
+  {
+    id: 'abdomen',
+    label: 'BODY MRI',
+    title: 'Abdomen',
+    description: 'Coverage for liver, pancreas, biliary, renal, and general abdominal examinations.',
+    protocols: 'T1 · T2 · DWI · MRCP',
+    plane: 'CORONAL',
+    image: '/landing/anatomy/abdomen-mri.webp',
+    alt: 'Coronal abdominal MRI with liver and abdominal organs visible',
+    icon: ScanLine,
+  },
+  {
+    id: 'pelvis',
+    label: 'PELVIC MRI',
+    title: 'Pelvis',
+    description: 'Multi-planar pelvic planning with high-resolution T2 and diffusion workflows.',
+    protocols: 'T1 · T2 · DWI · DYNAMIC',
+    plane: 'SAGITTAL',
+    image: '/landing/anatomy/pelvis-mri.webp',
+    alt: 'Sagittal pelvic MRI',
+    icon: ScanLine,
+  },
+  {
+    id: 'msk',
+    label: 'MSK MRI',
+    title: 'Musculoskeletal',
+    description: 'Joint-focused protocols for knee, shoulder, hip, ankle, wrist, and extremities.',
+    protocols: 'PD · T1 · T2 · FAT SAT',
+    plane: 'SAGITTAL',
+    image: '/landing/anatomy/knee-mri.webp',
+    alt: 'Sagittal knee MRI',
+    icon: Bone,
+  },
+  {
+    id: 'brain',
+    label: 'NEURO MRI',
+    title: 'Brain',
+    description: 'Routine, vascular, diffusion, susceptibility, post-contrast, and 3D neuro workflows.',
+    protocols: 'T1 · T2 · FLAIR · DWI · SWI',
+    plane: 'AXIAL',
+    image: '/protocol-series/t2-tra/frame-012.webp',
+    alt: 'Axial T2-weighted brain MRI',
+    icon: Brain,
+  },
+] as const;
+
 function padZero(value: number, size = 3) {
   return String(value).padStart(size, '0');
 }
@@ -45,30 +116,81 @@ export default function LandingPageContent() {
 
   useEffect(() => {
     let cancelled = false;
-    let readySignalled = false;
-    const images: HTMLImageElement[] = [];
+    const images = Array<HTMLImageElement>(FRAME_COUNT);
+    const loaded = new Set<number>();
+    imagesRef.current = images;
 
-    const markReady = () => {
-      if (!cancelled && !readySignalled) {
-        readySignalled = true;
-        setFirstFrameReady(true);
+    const loadFrame = (index: number) => new Promise<void>((resolve) => {
+      if (cancelled || loaded.has(index)) {
+        resolve();
+        return;
       }
-    };
 
-    for (let index = 1; index <= FRAME_COUNT; index += 1) {
       const image = new window.Image();
       image.decoding = 'async';
-      image.onload = markReady;
-      image.onerror = index === 1 ? markReady : null;
-      image.src = `${FRAME_PREFIX}${padZero(index)}${FRAME_EXT}`;
-      images.push(image);
-    }
+      if (index === 0) image.fetchPriority = 'high';
 
-    imagesRef.current = images;
+      const finish = () => {
+        image.onload = null;
+        image.onerror = null;
+        if (!cancelled) {
+          images[index] = image;
+          loaded.add(index);
+        }
+        resolve();
+      };
+
+      image.onload = finish;
+      image.onerror = finish;
+      image.src = `${FRAME_PREFIX}${padZero(index + 1)}${FRAME_EXT}`;
+    });
+
+    const loadPool = async (indices: number[], concurrency: number) => {
+      let cursor = 0;
+      const workers = Array.from({ length: concurrency }, async () => {
+        while (!cancelled && cursor < indices.length) {
+          const index = indices[cursor];
+          cursor += 1;
+          await loadFrame(index);
+        }
+      });
+      await Promise.all(workers);
+    };
+
+    const waitForIdle = () => new Promise<void>((resolve) => {
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(() => resolve(), { timeout: 500 });
+      } else {
+        setTimeout(resolve, 100);
+      }
+    });
+
+    const preloadSequence = async () => {
+      await loadFrame(0);
+      if (cancelled) return;
+      setFirstFrameReady(true);
+
+      const milestoneFrames = Array.from(
+        new Set([...Array.from({ length: 10 }, (_, index) => index * 30), FRAME_COUNT - 1]),
+      ).filter((index) => index > 0 && index < FRAME_COUNT);
+      await loadPool(milestoneFrames, 6);
+      await waitForIdle();
+
+      const keyFrames = Array.from({ length: Math.ceil(FRAME_COUNT / 6) }, (_, index) => index * 6)
+        .filter((index) => index < FRAME_COUNT && !loaded.has(index));
+      await loadPool(keyFrames, 8);
+      await waitForIdle();
+
+      const remainingFrames = Array.from({ length: FRAME_COUNT }, (_, index) => index)
+        .filter((index) => !loaded.has(index));
+      await loadPool(remainingFrames, 6);
+    };
+
+    void preloadSequence();
 
     return () => {
       cancelled = true;
-      images.forEach((image) => {
+      images.filter(Boolean).forEach((image) => {
         image.onload = null;
         image.onerror = null;
       });
@@ -106,7 +228,7 @@ export default function LandingPageContent() {
       if (!image) return;
 
       const canvasRatio = canvas.width / canvas.height;
-      const imageRatio = image.width / image.height;
+      const imageRatio = image.naturalWidth / image.naturalHeight;
       let width = canvas.width;
       let height = canvas.height;
       let x = 0;
@@ -124,14 +246,31 @@ export default function LandingPageContent() {
       context.drawImage(image, x, y, width, height);
     };
 
+    let renderAnimationFrame = 0;
+    let resizeAnimationFrame = 0;
+
     const resizeCanvas = () => {
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.floor(window.innerWidth * pixelRatio);
-      canvas.height = Math.floor(window.innerHeight * pixelRatio);
+      const bounds = canvas.getBoundingClientRect();
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+      canvas.width = Math.min(Math.floor(bounds.width * pixelRatio), 2560);
+      canvas.height = Math.min(Math.floor(bounds.height * pixelRatio), 1440);
       renderFrame(frame.current);
     };
 
-    window.addEventListener('resize', resizeCanvas);
+    const queueRender = () => {
+      if (renderAnimationFrame) return;
+      renderAnimationFrame = window.requestAnimationFrame(() => {
+        renderAnimationFrame = 0;
+        renderFrame(frame.current);
+      });
+    };
+
+    const handleResize = () => {
+      window.cancelAnimationFrame(resizeAnimationFrame);
+      resizeAnimationFrame = window.requestAnimationFrame(resizeCanvas);
+    };
+
+    window.addEventListener('resize', handleResize, { passive: true });
     resizeCanvas();
 
     const animation = gsap.context(() => {
@@ -141,7 +280,7 @@ export default function LandingPageContent() {
           trigger: sceneRef.current,
           start: 'top top',
           end: '+=5200',
-          scrub: 0.5,
+          scrub: 0.42,
           pin: true,
           anticipatePin: 1,
           invalidateOnRefresh: true,
@@ -155,7 +294,7 @@ export default function LandingPageContent() {
           duration: 6,
           ease: 'none',
           snap: 'current',
-          onUpdate: () => renderFrame(frame.current),
+          onUpdate: queueRender,
         },
         0,
       );
@@ -184,16 +323,40 @@ export default function LandingPageContent() {
     ScrollTrigger.refresh();
 
     return () => {
-      window.removeEventListener('resize', resizeCanvas);
+      window.removeEventListener('resize', handleResize);
+      window.cancelAnimationFrame(renderAnimationFrame);
+      window.cancelAnimationFrame(resizeAnimationFrame);
       animation.revert();
     };
   }, [firstFrameReady]);
+
+  useEffect(() => {
+    const elements = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'));
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      elements.forEach((element) => element.classList.add(styles.revealVisible));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add(styles.revealVisible);
+          observer.unobserve(entry.target);
+        });
+      },
+      { rootMargin: '0px 0px -10% 0px', threshold: 0.08 },
+    );
+
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <main className={styles.page}>
       <header className={styles.header}>
         <Link href="#top" className={styles.brand} aria-label="MRI Pro Workstation home">
-          <Image src="/logo-icon.png" alt="" width={34} height={34} priority />
+          <Image src="/logo-icon.png" alt="" width={34} height={34} preload />
           <span>
             <strong>MRI PRO</strong>
             <small>WORKSTATION</small>
@@ -202,6 +365,7 @@ export default function LandingPageContent() {
 
         <nav className={styles.nav} aria-label="Landing page navigation">
           <Link href="#platform">Platform</Link>
+          <Link href="#anatomy">Anatomy</Link>
           <Link href="#workflow">Workflow</Link>
           <Link href="#education">Education</Link>
         </nav>
@@ -235,7 +399,8 @@ export default function LandingPageContent() {
             </h1>
             <p className={styles.heroCopy}>
               A browser-based MRI workstation that brings slice planning, acquisition physics,
-              protocol workflow, and image review into one clinically familiar learning environment.
+              regional protocols, and image review into one clinically familiar learning environment—from
+              neuro and spine to cardiac, body, pelvis, and musculoskeletal MRI.
             </p>
             <div className={styles.heroActions}>
               <Link href="/workstation" className={styles.primaryButton}>
@@ -315,6 +480,7 @@ export default function LandingPageContent() {
         <span>MULTI-PLANAR VIEWING</span><i />
         <span>SCAN PHYSICS</span><i />
         <span>PROTOCOL QUEUE</span><i />
+        <span>REGIONAL PROTOCOLS</span><i />
         <span>DICOM WORKFLOW</span>
       </div>
 
@@ -386,6 +552,60 @@ export default function LandingPageContent() {
         </div>
       </section>
 
+      <section id="anatomy" className={`${styles.section} ${styles.anatomySection}`}>
+        <div className={styles.anatomyIntro}>
+          <div>
+            <span className={styles.sectionLabel}>WHOLE-BODY MRI WORKFLOWS</span>
+            <h2>Beyond neuro. Explore MRI across the body.</h2>
+          </div>
+          <p>
+            Move between regional exam families while learning how anatomy, coil selection,
+            planning planes, sequence weighting, and motion requirements change from one study to the next.
+          </p>
+        </div>
+
+        <div className={styles.regionGrid}>
+          {anatomyRegions.map((region) => {
+            const RegionIcon = region.icon;
+            return (
+              <article
+                key={region.id}
+                className={`${styles.regionCard} ${styles.reveal}`}
+                data-region={region.id}
+                data-reveal
+              >
+                <div className={styles.regionMedia}>
+                  <Image
+                    src={region.image}
+                    alt={region.alt}
+                    fill
+                    sizes="(max-width: 620px) 100vw, (max-width: 900px) 50vw, 33vw"
+                    loading="lazy"
+                    unoptimized={'animated' in region && region.animated}
+                  />
+                  <div className={styles.regionScrim} aria-hidden="true" />
+                </div>
+
+                <div className={styles.regionTopline}>
+                  <span><RegionIcon size={15} aria-hidden="true" /> {region.label}</span>
+                  <em>{region.plane}</em>
+                </div>
+
+                <div className={styles.regionContent}>
+                  <h3>{region.title}</h3>
+                  <p>{region.description}</p>
+                  <span className={styles.regionProtocols}>{region.protocols}</span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <p className={styles.anatomyNote}>
+          Educational reference imagery · Regional availability in the simulator varies by protocol family
+        </p>
+      </section>
+
       <section id="workflow" className={`${styles.section} ${styles.workflowSection}`}>
         <div className={styles.workflowHeading}>
           <span className={styles.sectionLabel}>CLINICALLY FAMILIAR FLOW</span>
@@ -408,10 +628,10 @@ export default function LandingPageContent() {
       <section id="education" className={`${styles.section} ${styles.educationSection}`}>
         <div className={styles.educationVisual}>
           <div className={styles.orbit} aria-hidden="true">
-            <div className={styles.orbitCenter}><Brain size={42} /></div>
-            <span className={styles.orbitOne}><ScanLine size={18} /></span>
-            <span className={styles.orbitTwo}><Monitor size={18} /></span>
-            <span className={styles.orbitThree}><Activity size={18} /></span>
+            <div className={styles.orbitCenter}><ScanLine size={42} /></div>
+            <span className={styles.orbitOne}><Brain size={18} /></span>
+            <span className={styles.orbitTwo}><HeartPulse size={18} /></span>
+            <span className={styles.orbitThree}><Bone size={18} /></span>
           </div>
         </div>
         <div className={styles.educationCopy}>
@@ -424,7 +644,7 @@ export default function LandingPageContent() {
           <ul>
             <li><GraduationCap size={18} /> Guided learning panels and contextual explanations</li>
             <li><ShieldCheck size={18} /> Clearly separated from clinical decision-making</li>
-            <li><Activity size={18} /> Responsive, hands-on exploration of MRI concepts</li>
+            <li><Activity size={18} /> Brain, spine, cardiac, body, pelvis, and MSK learning coverage</li>
           </ul>
         </div>
       </section>
@@ -451,6 +671,17 @@ export default function LandingPageContent() {
           <small>Developed by</small>
           <strong>P. MOKESH</strong>
         </div>
+        <details className={styles.imageCredits}>
+          <summary>Reference image credits</summary>
+          <p>
+            <a href="https://commons.wikimedia.org/wiki/File:SAGITTAL-FSE_T1_MRI.jpg" target="_blank" rel="noreferrer">Spine MRI — Ptrump16, CC BY-SA 4.0</a>
+            <a href="https://commons.wikimedia.org/wiki/File:Beating_Heart_axial.gif" target="_blank" rel="noreferrer">Cardiac cine MRI — G.D. Clarke, public domain</a>
+            <a href="https://commons.wikimedia.org/wiki/File:MRI_of_torso.jpg" target="_blank" rel="noreferrer">Abdominal MRI — Filippo antinori1223, CC BY-SA 4.0</a>
+            <a href="https://commons.wikimedia.org/wiki/File:Pelvic_MRI_125131.png" target="_blank" rel="noreferrer">Pelvic MRI — Nevit Dilmen, CC BY-SA 3.0</a>
+            <a href="https://commons.wikimedia.org/wiki/File:Knee_MRI_T1_TSE_Sagittal.jpg" target="_blank" rel="noreferrer">Knee MRI — Ptrump16, CC BY-SA 4.0</a>
+          </p>
+          <small>Reference files were converted to WebP and receive a tonal treatment in the interface.</small>
+        </details>
       </footer>
     </main>
   );
