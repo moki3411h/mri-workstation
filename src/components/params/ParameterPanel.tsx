@@ -426,9 +426,9 @@ export default function ParameterPanel() {
           {P('Base Resolution',  'matrix',           '',      'number', 64, 1024)}
           {SEL('Phase P. Fourier','partialFourier',  ['Off','7/8','6/8','5/8','Half'])}
           {SEL('Interpolation',  'filter',           ['On','Off'])}
-          <GROUP title="BANDWIDTH / iPAT" />
+          <GROUP title="BANDWIDTH / ACCELERATION" />
           {P('Pixel Bandwidth',  'bandwidth',        'Hz/Px', 'number', 20, 1000)}
-          {SEL('iPAT / GRAPPA',  'parallelImaging',  ['None','GRAPPA ×2','GRAPPA ×3','SENSE ×2'])}
+          {SEL('Parallel Imaging', 'parallelImaging', ['None','Acceleration ×2','Acceleration ×3','Acceleration ×4'])}
         </>)}
 
         {/* ── Tab 3: Geometry (FOV, orientation, rotation) ── */}
@@ -464,7 +464,7 @@ export default function ParameterPanel() {
           {P('Turbo Factor',     'turboFactor',    '',   'number', 1, 64)}
           {P('Echo Train Len',   'etl',            '',   'number', 1, 64)}
           {SEL('k-space Fill',   'filter',         ['Linear','Centric','Elliptical Centric'])}
-          {SEL('PAT Mode',       'parallelImaging',['GRAPPA','SENSE','None'])}
+          {SEL('Acceleration',   'parallelImaging',['None','Acceleration ×2','Acceleration ×3','Acceleration ×4'])}
         </>)}
 
         {/* ── Tab 5: System ── */}

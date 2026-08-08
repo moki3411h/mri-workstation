@@ -18,7 +18,7 @@ export interface Point3D { x: number; y: number; z: number; }
 /** Scale factor: how many mm fits across the viewport */
 export const VIEW_FOV_MM = 300;
 
-/** Siemens-style planning colours and protocol angle tolerance. */
+/** MRI Pro planning colours and protocol angle tolerance. */
 export const PLANNING_COLOR = '#d8df31';
 export const PLANNING_WARNING_COLOR = '#ff4d57';
 export const MAX_PLANNING_ANGLE_DEG = 12;
@@ -357,7 +357,7 @@ function computeHandlesFromQuad(corners: [Point2D, Point2D, Point2D, Point2D]): 
 const HANDLE_RADIUS = 12;
 
 export function hitTestFov(px: number, py: number, handles: Handles2D): string | null {
-  // Siemens-style rotation affordance: hover just outside any corner. The
+  // MRI Pro rotation affordance: hover just outside any corner. The
   // zone stays invisible so the prescription is not covered by UI chrome.
   const corners = [handles.tl, handles.tr, handles.br, handles.bl];
   for (const corner of corners) {

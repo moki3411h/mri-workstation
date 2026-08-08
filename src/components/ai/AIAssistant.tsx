@@ -14,7 +14,7 @@ const SUGGESTIONS: Record<string, string> = {
   'brain':    'Standard Brain Protocol: Scout, T1 SAG DF, T2 TSE TRA, FLAIR TRA, DWI',
   'spine':    'Cervical Spine: Scout, T2 SAG, T1 SAG, T2 TRA per disc level, STIR SAG (if trauma)',
   'pituitary':'Pituitary Protocol: T1 SAG thin 2mm, T1 COR 2mm, T1+Gd dynamic COR, T2 COR',
-  'aneurysm': 'Aneurysm Protocol: MRA TOF 3D, MPRAGE, SWI, T2 TSE for hemorrhage',
+  'aneurysm': 'Aneurysm protocol: 3D time-of-flight MRA, 3D T1 gradient echo, susceptibility imaging, and T2 fast spin echo.',
 };
 
 const PROTOCOLS = [
@@ -41,7 +41,7 @@ export default function AIAssistant() {
 
   const paramHints: string[] = [];
   if ((selectedSeq?.sarPct ?? 0) > 85) paramHints.push('⚠ High SAR — consider reducing flip angle or TR to protect patient.');
-  if (calcTA > '04:00') paramHints.push('⏱ Long scan time — enable GRAPPA ×2 in Resolution tab to speed up.');
+  if (calcTA > '04:00') paramHints.push('⏱ Long scan time — consider generic parallel-imaging acceleration ×2 in the Resolution tab.');
   if (params.te > 100) paramHints.push('📡 Very long TE — significant signal loss expected. Consider reducing TE for SNR.');
   if (planning.sliceCount > 50 && params.concatenations < 2) paramHints.push('📐 Many slices — increase Concatenations to avoid geometry issues.');
   if (params.averages >= 3) paramHints.push('🔁 High averages — scan time increases linearly. Consider reducing if tolerable.');

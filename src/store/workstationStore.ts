@@ -222,7 +222,7 @@ const defaultParams: ParamsState = {
   tr: 2000, te: 9, ti: 0, flipAngle: 150,
   bandwidth: 145, etl: 9, turboFactor: 9, averages: 1, concatenations: 2,
   matrix: 320,
-  fatSat: 'None', partialFourier: 'Off', parallelImaging: 'GRAPPA ×2',
+  fatSat: 'None', partialFourier: 'Off', parallelImaging: 'Acceleration ×2',
   position: 'L3.1 P21.5 F2.2',
   autoAlign: 'Head > Basis', coil: 'HE1-4; NE1,2; SP1', filter: 'Prescan Normalize',
 };

@@ -15,7 +15,7 @@ export default function StatusBar() {
 
   const segments = [
     'WS: MRI-PRO-001',
-    'syngo MR v2.0',
+    'MRI Pro Core 2.0',
     'DICOM 3.0',
     '1.5T | 33 mT/m | 200 T/m/s',
   ];

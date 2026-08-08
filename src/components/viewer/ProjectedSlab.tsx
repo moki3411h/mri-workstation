@@ -27,7 +27,7 @@ function visibleSliceIndices(count: number): Set<number> {
   return indices;
 }
 
-/** Orthogonal slab projection with restrained Siemens-style reference lines. */
+/** Orthogonal slab projection with restrained MRI Pro reference lines. */
 export default function ProjectedSlab({ plane, size }: Props) {
   const planning = useWorkstationStore((state) => state.planning);
   const angleStatus = getPlanningAngleStatus(planning);

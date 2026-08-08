@@ -26,7 +26,7 @@ export interface TAParams {
   matrix:       number;
   fovPhase:     number; // percentage
   partialFourier: string; // e.g., 'Off', '7/8', '6/8', '5/8', 'Half'
-  parallelImaging:string; // e.g., 'Off', 'GRAPPA ×2', 'GRAPPA ×3'
+  parallelImaging:string; // e.g., 'Off', 'Acceleration ×2', 'Acceleration ×3'
   phaseEncoding:  string; // 'AP', 'RL', 'HF'
 }
 

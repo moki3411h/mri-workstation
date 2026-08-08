@@ -20,7 +20,7 @@ function toward(from: Point2D, to: Point2D, distance: number): Point2D {
   return { x: from.x + (dx / length) * distance, y: from.y + (dy / length) * distance };
 }
 
-/** Thin, low-obstruction planning frame modelled after a Siemens prescription box. */
+/** Thin, low-obstruction MRI Pro planning frame. */
 export default function ActiveFOV({ plane, size }: Props) {
   const planning = useWorkstationStore((state) => state.planning);
   const handles = getFovHandles2D(planning, plane, size.w, size.h, true);
