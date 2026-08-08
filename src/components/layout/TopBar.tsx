@@ -13,50 +13,31 @@ import {
   loadExamFromCloud,
   type CloudExamMeta,
 } from "@/lib/examPersistence";
+import {
+  ALL_PROTOCOLS,
+  PROTOCOL_CATEGORIES,
+  PROTOCOL_CATEGORY_COUNT,
+  PROTOCOL_COUNT,
+  protocolMatches,
+  type ProtocolPreset,
+} from "@/lib/protocolCatalog";
 
-const PROTOCOL_TREE = [
-  {
-    category: 'Brain',
-    items: ['Routine Brain', 'Acute Stroke', 'Tumor Follow-up', 'MS Monitoring', 'Angiography']
-  },
-  {
-    category: 'Spine',
-    items: ['Cervical Routine', 'Thoracic Routine', 'Lumbar Routine', 'Whole Spine']
-  },
-  {
-    category: 'Knee',
-    items: ['Routine Knee', 'Meniscus Tear', 'Ligament Injury', 'Cartilage Assessment']
-  },
-  {
-    category: 'Shoulder',
-    items: ['Routine Shoulder', 'Rotator Cuff', 'Instability', 'MR Arthrogram']
-  },
-  {
-    category: 'Abdomen',
-    items: ['Routine Abdomen', 'Liver Lesion', 'MRCP', 'Kidneys']
-  },
-  {
-    category: 'Pelvis',
-    items: ['Routine Pelvis', 'Prostate', 'Rectum', 'Female Pelvis']
-  }
-];
-
-function ProtocolSelectorPopup({ onClose, onSelect }: { onClose: () => void, onSelect: (val: string) => void }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(['Brain']));
+function ProtocolSelectorPopup({ onClose, onSelect }: { onClose: () => void, onSelect: (protocol: ProtocolPreset) => void }) {
+  const [search, setSearch] = useState('');
+  const [categoryId, setCategoryId] = useState(PROTOCOL_CATEGORIES[0]!.id);
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  const visibleItems = useMemo(() => {
-    const arr: { type: 'cat' | 'item'; id: string; label: string; cat?: string }[] = [];
-    PROTOCOL_TREE.forEach(c => {
-      arr.push({ type: 'cat', id: c.category, label: c.category });
-      if (expanded.has(c.category)) {
-        c.items.forEach(i => {
-          arr.push({ type: 'item', id: i, label: i, cat: c.category });
-        });
-      }
-    });
-    return arr;
-  }, [expanded]);
+  const visibleProtocols = useMemo(() => {
+    if (search.trim()) return ALL_PROTOCOLS.filter(protocol => protocolMatches(protocol, search));
+    return PROTOCOL_CATEGORIES.find(category => category.id === categoryId)?.protocols ?? [];
+  }, [categoryId, search]);
+
+  const activeCategory = PROTOCOL_CATEGORIES.find(category => category.id === categoryId) ?? PROTOCOL_CATEGORIES[0]!;
+
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -66,128 +47,134 @@ function ProtocolSelectorPopup({ onClose, onSelect }: { onClose: () => void, onS
       }
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setFocusedIndex(i => Math.min(i + 1, visibleItems.length - 1));
+        setFocusedIndex(i => Math.min(i + 1, visibleProtocols.length - 1));
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
         setFocusedIndex(i => Math.max(i - 1, 0));
       }
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        const item = visibleItems[focusedIndex];
-        if (item.type === 'cat' && !expanded.has(item.id)) {
-          setExpanded(prev => new Set(prev).add(item.id));
-        }
-      }
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        const item = visibleItems[focusedIndex];
-        if (item.type === 'cat' && expanded.has(item.id)) {
-          const next = new Set(expanded);
-          next.delete(item.id);
-          setExpanded(next);
-        } else if (item.type === 'item') {
-          const pIdx = visibleItems.findIndex(v => v.id === item.cat);
-          if (pIdx !== -1) setFocusedIndex(pIdx);
-        }
-      }
       if (e.key === 'Enter') {
         e.preventDefault();
-        const item = visibleItems[focusedIndex];
-        if (item.type === 'cat') {
-          setExpanded(prev => {
-            const next = new Set(prev);
-            if (next.has(item.id)) next.delete(item.id);
-            else next.add(item.id);
-            return next;
-          });
-        } else {
-          onSelect(`${item.cat} Protocol — ${item.label}`);
-        }
+        const protocol = visibleProtocols[focusedIndex];
+        if (protocol) onSelect(protocol);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visibleItems, focusedIndex, expanded, onClose, onSelect]);
+  }, [visibleProtocols, focusedIndex, onClose, onSelect]);
 
   return (
     <>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={onClose} />
+      <div style={{ position: 'fixed', inset: 0, zIndex: 998, background: 'rgba(0,0,0,.36)', backdropFilter: 'blur(2px)' }} onClick={onClose} />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="MRI Pro protocol selector"
+        onClick={event => event.stopPropagation()}
         style={{
-          position: 'absolute',
-          top: '100%',
+          position: 'fixed',
+          top: '54px',
           left: '50%',
           transform: 'translateX(-50%)',
-          marginTop: '6px',
-          width: '240px',
-          maxHeight: '300px',
-          background: 'var(--c-bg-panel)',
-          border: '1px solid var(--c-border)',
-          borderRadius: '4px',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.8)',
+          width: 'min(880px, calc(100vw - 24px))',
+          height: 'min(570px, calc(100vh - 78px))',
+          background: 'var(--c-bg-dark)',
+          border: '1px solid var(--c-border-bright)',
+          borderRadius: '6px',
+          boxShadow: '0 22px 60px rgba(0,0,0,0.72)',
           zIndex: 999,
-          overflowY: 'auto',
-          padding: '4px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '2px',
+          overflow: 'hidden',
         }}
       >
-        {visibleItems.map((item, idx) => {
-          const isFocused = idx === focusedIndex;
-          if (item.type === 'cat') {
-            const isExp = expanded.has(item.id);
-            return (
-              <div
-                key={item.id}
-                onMouseEnter={() => setFocusedIndex(idx)}
-                onClick={() => {
-                  setExpanded(prev => {
-                    const next = new Set(prev);
-                    if (next.has(item.id)) next.delete(item.id);
-                    else next.add(item.id);
-                    return next;
-                  });
-                }}
-                style={{
-                  padding: '4px 8px',
-                  background: isFocused ? 'var(--c-border)' : 'transparent',
-                  color: isFocused ? 'var(--c-text-bright)' : 'var(--c-text-base)',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  borderRadius: '2px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <span style={{ fontSize: '8px' }}>{isExp ? '▼' : '▶'}</span>
-                {item.label}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px', borderBottom: '1px solid var(--c-border)', background: 'var(--c-bg-panel)', flexShrink: 0 }}>
+          <div style={{ minWidth: '205px' }}>
+            <div style={{ color: 'var(--c-text-bright)', fontSize: '12px', fontWeight: 800, letterSpacing: '.8px' }}>MRI PRO CLINICAL LIBRARY</div>
+            <div style={{ marginTop: '2px', color: 'var(--c-text-muted)', fontSize: '8px' }}>{PROTOCOL_COUNT} independent exams · {PROTOCOL_CATEGORY_COUNT} categories</div>
+          </div>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={event => { setSearch(event.target.value); setFocusedIndex(0); }}
+              placeholder="Search anatomy, indication, sequence, population…"
+              aria-label="Search protocol library"
+              style={{ width: '100%', padding: '8px 31px 8px 12px', border: '1px solid var(--c-border-bright)', borderRadius: '4px', background: 'var(--c-bg-input)', color: 'var(--c-text-bright)', outline: 'none', fontSize: '10px' }}
+            />
+            {search && <button type="button" onClick={() => { setSearch(''); setFocusedIndex(0); }} aria-label="Clear search" style={{ position: 'absolute', right: '8px', top: '6px', border: 0, background: 'transparent', color: 'var(--c-text-muted)', cursor: 'pointer', fontSize: '14px' }}>×</button>}
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close protocol library" style={{ width: '28px', height: '28px', border: '1px solid var(--c-border)', borderRadius: '3px', background: 'var(--c-bg-card)', color: 'var(--c-text-mid)', cursor: 'pointer', fontSize: '16px' }}>×</button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,1fr)', minHeight: 0, flex: 1 }}>
+          <aside style={{ overflowY: 'auto', borderRight: '1px solid var(--c-border)', background: 'var(--c-bg-deepest)', padding: '7px' }}>
+            <div style={{ padding: '4px 7px 7px', color: 'var(--c-text-muted)', fontSize: '7px', fontWeight: 800, letterSpacing: '.8px' }}>ANATOMY & WORKFLOW</div>
+            {PROTOCOL_CATEGORIES.map(category => {
+              const active = !search && category.id === categoryId;
+              return (
+                <button
+                  type="button"
+                  key={category.id}
+                  onClick={() => { setCategoryId(category.id); setSearch(''); setFocusedIndex(0); }}
+                  style={{ width: '100%', display: 'grid', gridTemplateColumns: '18px minmax(0,1fr) auto', alignItems: 'center', gap: '6px', padding: '7px 8px', border: '1px solid transparent', borderLeftColor: active ? 'var(--c-cyan)' : 'transparent', borderRadius: '2px', background: active ? 'var(--c-bg-selected)' : 'transparent', color: active ? 'var(--c-text-bright)' : 'var(--c-text-mid)', cursor: 'pointer', textAlign: 'left' }}
+                >
+                  <span style={{ color: active ? 'var(--c-cyan)' : 'var(--c-text-muted)', textAlign: 'center' }}>{category.icon}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '9px' }}>{category.name}</span>
+                  <span style={{ color: 'var(--c-text-muted)', fontSize: '7px', fontFamily: 'Roboto Mono,monospace' }}>{category.protocols.length}</span>
+                </button>
+              );
+            })}
+          </aside>
+
+          <main style={{ minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--c-border-faint)', background: 'var(--c-bg-card)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={{ color: 'var(--c-text-bright)', fontSize: '10px', fontWeight: 700 }}>{search ? `Search results for “${search}”` : activeCategory.name}</span>
+                <span style={{ color: 'var(--c-cyan)', fontSize: '8px', fontFamily: 'Roboto Mono,monospace' }}>{visibleProtocols.length} EXAMS</span>
               </div>
-            );
-          } else {
-            return (
-              <div
-                key={item.id}
-                onMouseEnter={() => setFocusedIndex(idx)}
-                onClick={() => onSelect(`${item.cat} Protocol — ${item.label}`)}
-                style={{
-                  padding: '4px 8px 4px 22px',
-                  background: isFocused ? 'var(--c-bg-selected)' : 'transparent',
-                  color: isFocused ? 'var(--c-cyan)' : 'var(--c-text-mid)',
-                  fontSize: '9.5px',
-                  cursor: 'pointer',
-                  borderRadius: '2px',
-                  borderLeft: isFocused ? '2px solid var(--c-cyan)' : '2px solid transparent',
-                }}
-              >
-                {item.label}
-              </div>
-            );
-          }
-        })}
+              <div style={{ marginTop: '3px', color: 'var(--c-text-muted)', fontSize: '8px' }}>{search ? 'Results across the complete library.' : activeCategory.description}</div>
+            </div>
+
+            <div style={{ minHeight: 0, overflowY: 'auto', padding: '7px' }}>
+              {visibleProtocols.map((protocol, index) => {
+                const focused = index === focusedIndex;
+                return (
+                  <button
+                    type="button"
+                    key={protocol.id}
+                    onMouseEnter={() => setFocusedIndex(index)}
+                    onClick={() => onSelect(protocol)}
+                    style={{ width: '100%', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: '10px', padding: '9px 10px', marginBottom: '4px', border: `1px solid ${focused ? 'var(--c-border-accent)' : 'var(--c-border-faint)'}`, borderLeft: `2px solid ${focused ? 'var(--c-cyan)' : 'transparent'}`, borderRadius: '3px', background: focused ? 'var(--c-bg-selected)' : 'var(--c-bg-panel)', color: 'inherit', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <span style={{ color: focused ? 'var(--c-text-bright)' : 'var(--c-text-base)', fontSize: '10px', fontWeight: 700 }}>{protocol.name}</span>
+                        <span style={{ padding: '1px 4px', border: '1px solid var(--c-border)', borderRadius: '2px', color: 'var(--c-text-muted)', fontSize: '6.5px' }}>{protocol.group}</span>
+                      </span>
+                      <span style={{ display: 'block', marginTop: '3px', color: 'var(--c-text-subtle)', fontSize: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{protocol.description}</span>
+                      <span style={{ display: 'flex', gap: '4px', marginTop: '5px', overflow: 'hidden' }}>
+                        {protocol.sequences.slice(0, 4).map(sequence => <span key={sequence.name} style={{ flexShrink: 0, padding: '2px 5px', background: 'var(--c-bg-deepest)', border: '1px solid var(--c-border-faint)', borderRadius: '2px', color: 'var(--c-text-muted)', fontSize: '6.5px' }}>{sequence.name}</span>)}
+                        {protocol.sequences.length > 4 && <span style={{ color: 'var(--c-text-muted)', fontSize: '7px', padding: '2px' }}>+{protocol.sequences.length - 4}</span>}
+                      </span>
+                    </span>
+                    <span style={{ alignSelf: 'center', minWidth: '82px', textAlign: 'right' }}>
+                      <span style={{ display: 'block', color: 'var(--c-cyan)', fontFamily: 'Roboto Mono,monospace', fontSize: '9px' }}>{protocol.estimatedTime}</span>
+                      <span style={{ display: 'block', marginTop: '3px', color: 'var(--c-text-muted)', fontSize: '7px' }}>{protocol.sequences.length} sequences</span>
+                      <span style={{ display: 'block', marginTop: '3px', color: protocol.contrast === 'With contrast' ? 'var(--c-amber)' : 'var(--c-text-subtle)', fontSize: '6.5px' }}>{protocol.contrast}</span>
+                    </span>
+                  </button>
+                );
+              })}
+              {visibleProtocols.length === 0 && <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--c-text-muted)', fontSize: '9px' }}>No matching protocol. Try anatomy, indication, or a sequence family.</div>}
+            </div>
+          </main>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '7px 12px', borderTop: '1px solid var(--c-border)', background: 'var(--c-bg-deepest)', flexShrink: 0 }}>
+          <span style={{ color: 'var(--c-text-muted)', fontSize: '7px' }}>INDEPENDENT EDUCATIONAL PRESETS · Not vendor protocol data · Review locally before clinical use.</span>
+          <span style={{ color: 'var(--c-text-muted)', fontSize: '7px', fontFamily: 'Roboto Mono,monospace' }}>↑↓ Navigate · Enter Load · Esc Close</span>
+        </div>
       </div>
     </>
   );
@@ -496,10 +483,10 @@ export default function TopBar() {
             {showProtocolSelector && (
               <ProtocolSelectorPopup
                 onClose={() => setShowProtocolSelector(false)}
-                onSelect={(study) => {
-                  useWorkstationStore.getState().setPatient({ study });
+                onSelect={(protocol) => {
+                  useWorkstationStore.getState().loadProtocol(protocol);
                   setShowProtocolSelector(false);
-                  toast(`Protocol switched to: ${study}`, "success");
+                  toast(`${protocol.name} loaded · ${protocol.sequences.length} sequences`, "success");
                 }}
               />
             )}

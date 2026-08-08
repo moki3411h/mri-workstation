@@ -4,6 +4,7 @@ import { SEQUENCES, type Sequence, calculateTA, formatTime } from '@/lib/scanEng
 import { calcSNR, getContrastType, calcResolution } from '@/lib/physics';
 import { eulerToMatrix } from '@/lib/geometry';
 import type { ProtocolImageSeries } from '@/lib/protocolSeries';
+import { materializeProtocolSequences, type ProtocolPreset } from '@/lib/protocolCatalog';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -191,6 +192,7 @@ export interface WorkstationStore {
   deleteSeq:        (id: number) => void;
   duplicateSeq:     (id: number) => void;
   moveSeq:          (id: number, dir: 'up' | 'down') => void;
+  loadProtocol:     (protocol: ProtocolPreset) => void;
   loadExam:         (snap: import('@/lib/examPersistence').ExamSnapshot) => void;
   resetViewport:    (plane: Plane) => void;
   resetAll:         () => void;
@@ -546,6 +548,46 @@ export const useWorkstationStore = create<WorkstationStore>((set, get) => ({
     [seqs[idx], seqs[newIdx]] = [seqs[newIdx]!, seqs[idx]!];
     return { sequences: seqs };
   }),
+
+  loadProtocol: (protocol) => {
+    const sequences = materializeProtocolSequences(protocol);
+    const firstDiagnostic = sequences.find(sequence => !sequence.name.toLowerCase().includes('localizer')) ?? sequences[0];
+    if (!firstDiagnostic) return;
+
+    const normalizedName = firstDiagnostic.name.toLowerCase();
+    let orientation: PlanningObject['orientation'] = 'axial';
+    if (normalizedName.includes(' sag')) orientation = 'sagittal';
+    else if (normalizedName.includes(' cor')) orientation = 'coronal';
+
+    const params = {
+      ...get().params,
+      tr: firstDiagnostic.tr,
+      te: firstDiagnostic.te,
+      ti: firstDiagnostic.ti,
+      flipAngle: firstDiagnostic.flipAngle,
+    };
+    const planning = sanitizePlanning({
+      ...get().planning,
+      orientation,
+      sliceCount: firstDiagnostic.sl,
+      rotX: 0,
+      rotY: 0,
+      rotZ: 0,
+      rotationMatrix: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    }, get().planning);
+
+    set({
+      sequences,
+      selectedSeqId: sequences[0]!.id,
+      scan: { running: false, paused: false, seqId: null, progress: 0, remainSec: 0 },
+      params,
+      planning,
+      patient: { ...get().patient, study: `MRI Pro — ${protocol.name}` },
+      cineMode: false,
+      statusMsg: `Loaded ${protocol.name}: ${sequences.length} sequences · TA ${protocol.estimatedTime}`,
+      ...computePhysics(params, planning),
+    });
+  },
 
   loadExam: (snap) => set({
     patient:   snap.patient,

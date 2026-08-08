@@ -3,7 +3,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useWorkstationStore } from '@/store/workstationStore';
 import { toast } from '@/lib/toast';
-import { formatTime } from '@/lib/scanEngine';
+import { findProtocol } from '@/lib/protocolCatalog';
 
 const ProtocolLibrary = dynamic(() => import('@/components/protocols/ProtocolLibrary'), { ssr: false });
 
@@ -15,28 +15,19 @@ const MOCK_PATIENTS = [{
   ],
 }];
 
-const PROTOCOLS = [
-  { body: 'Brain', seqs: ['AAHead_Scout', 'T1 SAG', 'T2 COR', 'T2 TRA', 'FLAIR TRA', 'DWI', 'SWI', 'T1+Gd TRA'] },
-  { body: 'Spine — Cervical', seqs: ['Scout', 'T2 SAG', 'T1 SAG', 'T2 TRA per disc'] },
-  { body: 'Spine — Lumbar', seqs: ['Scout', 'T2 SAG', 'T1 SAG', 'T2 TRA per disc', 'STIR SAG'] },
-  { body: 'Knee', seqs: ['Scout', 'PD COR', 'PD SAG', 'PD TRA', 'T1 COR', 'T2 SAG FS'] },
-  { body: 'Abdomen', seqs: ['Scout', 'HASTE COR', 'T2 TRA', 'MRCP', 'T1 In/Out phase', 'DWI'] },
-];
-
 const PRESETS = [
-  'Routine Brain — Standard',
-  'Acute Stroke Protocol',
-  'Tumor Follow-up',
-  'MS Monitoring Protocol',
-  'Angiography — MRA TOF',
+  { label: 'Routine Brain — Standard', id: 'neuro-head-routine-brain' },
+  { label: 'Acute Stroke', id: 'neuro-head-acute-stroke' },
+  { label: 'Primary Brain Tumor', id: 'neuro-head-primary-brain-tumor' },
+  { label: 'Demyelinating Disease', id: 'neuro-head-demyelinating-disease' },
+  { label: 'Intracranial Arterial Survey', id: 'neuro-head-intracranial-arterial-survey' },
 ];
 
 export default function LeftSidebar() {
-  const { sequences, selectedSeqId, selectSeq } = useWorkstationStore();
+  const { sequences, selectedSeqId, selectSeq, loadProtocol } = useWorkstationStore();
   const [tab, setTab] = useState(0);
   const [search, setSearch] = useState('');
   const [openStudy, setOpenStudy] = useState<string | null>('s1');
-  const [openBody, setOpenBody] = useState<string | null>('Brain');
 
   const tabs = ['Patient', 'Protocols', 'Queue', 'Presets'];
   const ROW = { display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 8px', fontSize: '9.5px', cursor: 'pointer', color: 'var(--c-text-mid)', borderBottom: '1px solid var(--c-border-faint)' } as const;
@@ -52,13 +43,13 @@ export default function LeftSidebar() {
       </div>
 
       {/* Search */}
-      <div style={{ padding: '5px 6px', flexShrink: 0, borderBottom: '1px solid var(--c-border)' }}>
+      {tab !== 1 && <div style={{ padding: '5px 6px', flexShrink: 0, borderBottom: '1px solid var(--c-border)' }}>
         <input
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search..."
           style={{ width: '100%', fontSize: '10px', padding: '3px 6px', background: 'var(--c-bg-deepest)', border: '1px solid var(--c-border)', color: 'var(--c-text-base)', borderRadius: '2px', outline: 'none' }}
         />
-      </div>
+      </div>}
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -135,14 +126,19 @@ export default function LeftSidebar() {
         {/* PRESETS TAB */}
         {tab === 3 && (
           <div>
-            {PRESETS.filter(p => !search || p.toLowerCase().includes(search.toLowerCase())).map((preset, i) => (
-              <div key={i} style={{ ...ROW, justifyContent: 'space-between', padding: '5px 8px' }}>
+            {PRESETS.filter(p => !search || p.label.toLowerCase().includes(search.toLowerCase())).map((preset) => (
+              <div key={preset.id} style={{ ...ROW, justifyContent: 'space-between', padding: '5px 8px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '9px' }}>
                   <span style={{ color: 'var(--c-amber)' }}>★</span>
-                  <span style={{ color: 'var(--c-text-mid)' }}>{preset}</span>
+                  <span style={{ color: 'var(--c-text-mid)' }}>{preset.label}</span>
                 </span>
                 <button
-                  onClick={() => toast(`Preset loaded: ${preset}`, 'success')}
+                  onClick={() => {
+                    const protocol = findProtocol(preset.id);
+                    if (!protocol) return;
+                    loadProtocol(protocol);
+                    toast(`Preset loaded: ${protocol.name}`, 'success');
+                  }}
                   style={{ fontSize: '8px', background: 'var(--c-bg-elevated)', border: '1px solid var(--c-border-bright)', color: 'var(--c-text-mid)', padding: '1px 6px', borderRadius: '2px', cursor: 'pointer' }}
                 >
                   Load
