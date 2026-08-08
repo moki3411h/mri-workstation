@@ -607,21 +607,34 @@ export default function LandingPageContent() {
       </section>
 
       <section id="workflow" className={`${styles.section} ${styles.workflowSection}`}>
-        <div className={styles.workflowHeading}>
-          <span className={styles.sectionLabel}>CLINICALLY FAMILIAR FLOW</span>
-          <h2>One continuous path through the exam.</h2>
-          <p>Every module is connected so learners understand not only what to click, but why each decision matters.</p>
-        </div>
+        <div className={styles.workflowShell}>
+          <div className={styles.workflowHeading}>
+            <span className={styles.sectionLabel}>CONNECTED EXAM FLOW</span>
+            <h2>One exam. Four connected decisions.</h2>
+            <p>
+              Move from patient setup to acquisition without leaving the learning workflow.
+              Each step carries context into the next.
+            </p>
+            <div className={styles.workflowSummary} aria-label="Workflow summary">
+              <span><strong>04</strong> modules</span>
+              <span><strong>01</strong> session</span>
+              <span><strong>LIVE</strong> feedback</span>
+            </div>
+          </div>
 
-        <div className={styles.workflowGrid}>
-          {workflowSteps.map(([number, title, description]) => (
-            <article key={number}>
-              <span>{number}</span>
-              <h3>{title}</h3>
-              <p>{description}</p>
-              <ArrowRight size={17} aria-hidden="true" />
-            </article>
-          ))}
+          <ol className={styles.workflowGrid} aria-label="MRI exam workflow">
+            {workflowSteps.map(([number, title, description]) => (
+              <li key={number} className={styles.reveal} data-reveal>
+                <div className={styles.workflowStepTop}>
+                  <span>{number}</span>
+                  <em>CONNECTED</em>
+                </div>
+                <h3>{title}</h3>
+                <p>{description}</p>
+                <ArrowRight className={styles.workflowArrow} size={16} aria-hidden="true" />
+              </li>
+            ))}
+          </ol>
         </div>
       </section>
 

@@ -899,37 +899,166 @@
 .workflowSection {
   width: 100%;
   max-width: none;
-  padding: 150px max(24px, calc((100vw - 1180px) / 2));
+  padding: 88px max(24px, calc((100vw - 1180px) / 2));
   border-top: 1px solid rgba(117, 154, 189, 0.1);
   border-bottom: 1px solid rgba(117, 154, 189, 0.1);
-  background: #040a12;
+  background:
+    radial-gradient(circle at 75% 18%, rgba(30, 157, 192, 0.08), transparent 30%),
+    #03080f;
 }
 
-.workflowHeading { max-width: 760px; }
-.workflowHeading > p { max-width: 620px; margin-top: 24px; }
+.workflowShell {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.22fr);
+  gap: clamp(52px, 7vw, 96px);
+  align-items: center;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.workflowHeading { max-width: 440px; }
+
+.workflowHeading h2 {
+  max-width: 520px;
+  margin-top: 16px;
+  color: white;
+  font-size: clamp(40px, 4vw, 58px);
+  font-weight: 640;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.workflowHeading > p {
+  max-width: 430px;
+  margin-top: 20px;
+  color: #7c8fa5;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.workflowSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 26px;
+}
+
+.workflowSummary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 29px;
+  padding: 0 10px;
+  border: 1px solid rgba(112, 155, 190, 0.14);
+  border-radius: 999px;
+  background: rgba(9, 20, 32, 0.68);
+  color: #61758b;
+  font-family: "Roboto Mono", monospace;
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workflowSummary strong { color: #58d5e8; font-size: 8px; }
 
 .workflowGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  margin-top: 70px;
-  border-top: 1px solid rgba(117, 154, 189, 0.15);
-  border-bottom: 1px solid rgba(117, 154, 189, 0.15);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  list-style: none;
 }
 
-.workflowGrid article {
+.workflowGrid li {
   position: relative;
-  min-height: 270px;
-  padding: 28px;
-  border-right: 1px solid rgba(117, 154, 189, 0.15);
-  transition: background 200ms ease;
+  min-height: 174px;
+  padding: 20px 20px 18px;
+  overflow: hidden;
+  border: 1px solid rgba(117, 154, 189, 0.13);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(9, 20, 33, 0.86), rgba(5, 12, 21, 0.92));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+  transition:
+    opacity 680ms ease,
+    transform 760ms cubic-bezier(0.2, 0.75, 0.2, 1),
+    border-color 200ms ease,
+    background 200ms ease;
 }
 
-.workflowGrid article:last-child { border-right: 0; }
-.workflowGrid article:hover { background: rgba(39, 216, 242, 0.035); }
-.workflowGrid article > span { color: #2b7590; font-family: "Roboto Mono", monospace; font-size: 9px; }
-.workflowGrid h3 { margin-top: 66px; color: white; font-size: 25px; font-weight: 620; }
-.workflowGrid p { margin-top: 12px; color: #6f8298; font-size: 12px; line-height: 1.7; }
-.workflowGrid svg { position: absolute; right: 24px; bottom: 24px; color: #2a8298; }
+.workflowGrid li::before {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  width: 42px;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, #38d5ec, transparent);
+  box-shadow: 0 0 12px rgba(39, 216, 242, 0.35);
+}
+
+.workflowGrid li:hover {
+  border-color: rgba(57, 205, 229, 0.3);
+  background: linear-gradient(145deg, rgba(11, 28, 43, 0.94), rgba(5, 14, 24, 0.96));
+  transform: translateY(-2px);
+}
+
+.workflowStepTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.workflowStepTop span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(57, 205, 229, 0.22);
+  border-radius: 9px;
+  background: rgba(39, 216, 242, 0.07);
+  color: #5dddf0;
+  font-family: "Roboto Mono", monospace;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.workflowStepTop em {
+  color: #40566c;
+  font-family: "Roboto Mono", monospace;
+  font-size: 6px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.workflowGrid h3 {
+  margin-top: 19px;
+  color: white;
+  font-size: 19px;
+  font-weight: 620;
+  letter-spacing: -0.025em;
+}
+
+.workflowGrid p {
+  max-width: 230px;
+  margin-top: 7px;
+  color: #6f8298;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.workflowArrow {
+  position: absolute;
+  right: 17px;
+  bottom: 17px;
+  color: #238ba1;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.workflowGrid li:hover .workflowArrow {
+  color: #55dbee;
+  transform: translateX(3px);
+}
 
 .educationSection {
   display: grid;
@@ -1102,9 +1231,9 @@
   .anatomyIntro { grid-template-columns: 1fr; gap: 28px; }
   .featureGrid { grid-template-columns: 1fr; }
   .featureCardLarge { min-height: 540px; }
+  .workflowShell { grid-template-columns: 1fr; gap: 38px; }
+  .workflowHeading { max-width: 680px; }
   .workflowGrid { grid-template-columns: repeat(2, 1fr); }
-  .workflowGrid article:nth-child(2) { border-right: 0; }
-  .workflowGrid article:nth-child(-n + 2) { border-bottom: 1px solid rgba(117, 154, 189, 0.15); }
   .educationSection { grid-template-columns: 1fr; gap: 60px; }
   .regionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .regionCard[data-region="spine"],
@@ -1133,12 +1262,13 @@
   .sceneRail { right: 10px; }
   .capabilityStrip { justify-content: flex-start; overflow: hidden; white-space: nowrap; }
   .section { width: calc(100% - 32px); padding: 100px 0; }
-  .sectionIntro h2, .workflowHeading h2, .educationCopy h2, .finalCta h2 { font-size: 42px; }
+  .sectionIntro h2, .educationCopy h2, .finalCta h2 { font-size: 42px; }
+  .workflowHeading h2 { font-size: 38px; }
   .anatomyIntro h2 { font-size: 42px; }
   .featureCard, .featureCardLarge, .viewerCard, .queueCard { min-height: 470px; }
   .featureContent { right: 24px; bottom: 24px; left: 24px; }
   .physicsCard, .queueCard { padding: 24px; }
-  .workflowSection { width: 100%; padding: 100px 16px; }
+  .workflowSection { width: 100%; padding: 72px 16px; }
   .anatomySection { width: 100%; padding: 100px 16px; }
   .regionGrid { grid-template-columns: 1fr; }
   .regionCard,
@@ -1146,9 +1276,8 @@
   .regionCard[data-region="cardiac"] { min-height: 380px; }
   .anatomyNote { text-align: left; line-height: 1.6; }
   .workflowGrid { grid-template-columns: 1fr; }
-  .workflowGrid article { min-height: 220px; border-right: 0; border-bottom: 1px solid rgba(117, 154, 189, 0.15); }
-  .workflowGrid article:last-child { border-bottom: 0; }
-  .workflowGrid h3 { margin-top: 40px; }
+  .workflowGrid li { min-height: 152px; }
+  .workflowGrid h3 { margin-top: 15px; }
   .educationSection { width: calc(100% - 32px); }
   .finalCta { width: calc(100% - 24px); margin-bottom: 40px; padding: 80px 20px; border-radius: 24px; }
   .footer { width: calc(100% - 32px); grid-template-columns: 1fr; gap: 14px; padding: 20px 0; }
